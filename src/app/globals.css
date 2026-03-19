@@ -1,0 +1,297 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F7FAFF;
+  --foreground: #0A0F1C;
+
+  /* Brand Identity Colors */
+  --brand-primary: #00A3FF;
+  --brand-primary-hover: #008FD9;
+  --brand-accent: #32D2FF;
+  --brand-dark-navy: #0A0F1C;
+
+  /* Light Theme Color Tokens */
+  --color-primary: #00A3FF;
+  --color-primary-hover: #008FD9;
+  --color-accent: #32D2FF;
+
+  --color-background: #F7FAFF;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #ECF3FF;
+  --color-surface-hover: #E2EEFF;
+
+  --color-text-primary: #0A0F1C;
+  --color-text-secondary: #344563;
+  --color-text-muted: #667792;
+  --color-text-inverse: #FFFFFF;
+
+  --color-border-default: #D1E0F2;
+  --color-border-subtle: #E2ECFA;
+  --color-border-focus: #00A3FF;
+
+  --color-success: #16C79A;
+  --color-warning: #F4B740;
+  --color-error: #F05454;
+  --color-info: #00A3FF;
+}
+
+/* Base Styles */
+body {
+  background: var(--color-background) !important;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  position: relative;
+}
+
+/* Custom scrollbar with brand colors */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-hover);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) var(--color-surface-muted);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+  position: relative;
+}
+
+/* Custom animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* Hover effects with brand colors */
+.hover-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 25px -5px rgba(0, 179, 255, 0.15), 0 10px 10px -5px rgba(0, 179, 255, 0.1);
+}
+
+/* Header styling with new brand colors */
+header.reflow-header,
+.reflow-header {
+  background-color: var(--color-surface) !important;
+  background: var(--color-surface) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+  transform: translateY(0) !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 9999 !important;
+  border-bottom: 1px solid var(--color-border-subtle) !important;
+}
+
+/* Header text colors */
+header.reflow-header a,
+header.reflow-header nav,
+.reflow-header a,
+.reflow-header nav {
+  color: var(--color-text-primary) !important;
+}
+
+header.reflow-header .text-black,
+.reflow-header .text-black {
+  color: var(--color-text-primary) !important;
+}
+
+/* Primary CTA buttons */
+.register-button,
+.register-button-link,
+header.reflow-header .register-button,
+.reflow-header .register-button {
+  background: var(--color-primary) !important;
+  background-color: var(--color-primary) !important;
+  border-radius: 9999px !important;
+  transition: all 0.3s ease !important;
+}
+
+.register-button:hover,
+.register-button-link:hover {
+  background: var(--color-primary-hover) !important;
+  background-color: var(--color-primary-hover) !important;
+}
+
+.register-button span {
+  color: var(--color-text-inverse) !important;
+}
+
+/* Button variants following component usage rules */
+.btn-primary {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background-color: var(--color-surface-muted);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border-default);
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-surface-hover);
+}
+
+/* Card/Panel styling */
+.card,
+.panel {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-default);
+  transition: all 0.3s ease;
+}
+
+.card:hover,
+.panel:hover {
+  background-color: var(--color-surface-hover);
+  box-shadow: 0 10px 25px -5px rgba(0, 179, 255, 0.1);
+}
+
+/* Form elements */
+input,
+textarea,
+select {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+  transition: all 0.3s ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgba(0, 179, 255, 0.1);
+}
+
+/* Status colors */
+.text-success {
+  color: var(--color-success);
+}
+
+.text-warning {
+  color: var(--color-warning);
+}
+
+.text-error {
+  color: var(--color-error);
+}
+
+.text-info {
+  color: var(--color-info);
+}
+
+.bg-success {
+  background-color: var(--color-success);
+}
+
+.bg-warning {
+  background-color: var(--color-warning);
+}
+
+.bg-error {
+  background-color: var(--color-error);
+}
+
+.bg-info {
+  background-color: var(--color-info);
+}
+
+/* Brand gradient utilities */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+}
+
+.bg-gradient-surface {
+  background: linear-gradient(135deg, var(--color-surface), var(--color-surface-muted));
+}
+
+/* Text gradient utilities */
+.text-gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Animation shimmer effect with brand colors */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 179, 255, 0.1), transparent);
+  animation: shimmer 2s infinite;
+}
+
+/* Override any conflicting styles */
+header.reflow-header[style],
+header.reflow-header[class*="bg-"],
+.reflow-header[style],
+.reflow-header[class*="bg-"] {
+  background-color: var(--color-surface) !important;
+  background: var(--color-surface) !important;
+}
