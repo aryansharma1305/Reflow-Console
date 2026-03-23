@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getAllProjects, getProjectDevices, getUserEmail, getUserName, isAuthenticated, exportDeviceData } from "@/lib/api";
@@ -106,6 +106,10 @@ export default function AnalyticsPage() {
     // Live MQTT
     const [livePolling, setLivePolling] = useState(false);
     const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // New features
+    const [csvDropdownOpen, setCsvDropdownOpen] = useState(false);
+    const [showDeviation, setShowDeviation] = useState(false);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -353,14 +357,83 @@ export default function AnalyticsPage() {
         doc.save(`${selectedDevice}_analytics.pdf`);
     }
 
+    // Export as CSV with dynamic intervals
+    async function exportCSV(intervalMinutes?: number) {
+        if (chartData.length === 0) return;
+        
+        let exportData = chartData;
+        
+        if (intervalMinutes) {
+            const ms = intervalMinutes * 60 * 1000;
+            const buckets: Record<number, any> = {};
+            chartData.forEach(row => {
+                if(!row.ts) return;
+                const bucketTs = Math.floor(row.ts / ms) * ms;
+                if (!buckets[bucketTs]) {
+                    buckets[bucketTs] = { ts: bucketTs, time: new Date(bucketTs).toLocaleString("en-IN"), count: 0 };
+                }
+                const b = buckets[bucketTs];
+                b.count++;
+                Object.keys(row).forEach(k => {
+                    if (k !== 'time' && k !== 'ts' && k !== 'timestamp' && typeof row[k] === 'number') {
+                        b[k] = (b[k] || 0) + (row[k] as number);
+                    }
+                });
+            });
+            exportData = Object.values(buckets).map((b: any) => {
+                const res: any = { time: b.time };
+                Object.keys(b).forEach(k => {
+                    if (k !== 'time' && k !== 'ts' && k !== 'count') res[k] = Number((b[k] / b.count).toFixed(2));
+                });
+                return res;
+            }).sort((a,b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+        }
+
+        const headers = ["time", ...channelKeys];
+        const rows = exportData.map(row => 
+            headers.map(h => row[h] !== undefined ? row[h] : "").join(",")
+        );
+        const csv = [headers.join(","), ...rows].join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const suffix = intervalMinutes ? `_${intervalMinutes}min` : "";
+        a.download = `${selectedDevice}_analytics${suffix}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
     // Stat computations
     const activeKeys = channelKeys.filter((k) => visibleChannels[k]);
     const stats = computeStats(chartData, activeKeys);
 
+    // Compute deviation chart data if requested
+    const processedChartData = useMemo(() => {
+        if (!showDeviation || activeKeys.length === 0) return chartData;
+        // Compute average per channel based on current window
+        const avgs: Record<string, number> = {};
+        activeKeys.forEach(k => {
+            const stat = stats.find(s => s.key === k);
+            avgs[k] = stat?.avg && stat.avg !== 0 ? stat.avg : 1; 
+        });
+        
+        return chartData.map(row => {
+            const newRow: any = { ...row };
+            activeKeys.forEach(k => {
+                if (typeof row[k] === 'number') {
+                    const avg = avgs[k];
+                    newRow[k] = Number((((row[k] as number - avg) / Math.abs(avg)) * 100).toFixed(2));
+                }
+            });
+            return newRow;
+        });
+    }, [chartData, showDeviation, activeKeys, stats]);
+
     // Chart renderer
     const renderChart = () => {
         const sharedProps = {
-            data: chartData,
+            data: processedChartData,
             margin: { top: 5, right: 30, left: 20, bottom: 5 },
         };
         const xAxis = (
@@ -380,6 +453,10 @@ export default function AnalyticsPage() {
         const tooltip = (
             <Tooltip
                 contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "12px" }}
+                formatter={(value: number, name: string) => [
+                    `${value}${showDeviation ? "%" : ""}`,
+                    name
+                ]}
             />
         );
         const legend = (
@@ -468,6 +545,25 @@ export default function AnalyticsPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {/* CSV Dropdown */}
+                        <div className="relative z-50">
+                            <button
+                                onClick={() => setCsvDropdownOpen(!csvDropdownOpen)}
+                                disabled={chartData.length === 0}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-surface-muted transition-colors disabled:opacity-40"
+                            >
+                                <Download className="w-4 h-4" /> Export CSV <ChevronDown className="w-3 h-3" />
+                            </button>
+                            <AnimatePresence>
+                                {csvDropdownOpen && (
+                                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="absolute top-full right-0 mt-1.5 bg-white border border-border-subtle rounded-lg shadow-xl overflow-hidden py-1 w-48 text-left">
+                                        <button onClick={() => { exportCSV(); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">Raw Data</button>
+                                        <button onClick={() => { exportCSV(5); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">5 Min Averaged</button>
+                                        <button onClick={() => { exportCSV(15); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">15 Min Averaged</button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
                         <button
                             onClick={exportImage}
                             disabled={chartData.length === 0}
@@ -661,9 +757,22 @@ export default function AnalyticsPage() {
                                 channelKeys.forEach((k) => { next[k] = !allOn; });
                                 setVisibleChannels(next);
                             }}
-                            className="text-xs text-primary font-medium hover:underline ml-2"
+                            className="text-xs text-primary font-medium hover:underline ml-2 mr-auto"
                         >
                             {channelKeys.every((k) => visibleChannels[k]) ? "Hide all" : "Show all"}
+                        </button>
+                        
+                        {/* Deviation % Toggle */}
+                        <button
+                            onClick={() => setShowDeviation(!showDeviation)}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                                showDeviation
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : "bg-white text-text-muted border-border-subtle hover:bg-surface-muted"
+                            }`}
+                        >
+                            <Activity className="w-3.5 h-3.5" />
+                            Plot Deviation %
                         </button>
                     </motion.div>
                 )}

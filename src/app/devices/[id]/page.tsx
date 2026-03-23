@@ -108,13 +108,13 @@ export default function DeviceConfigPage() {
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
     // Calibration config
-    const [calibration, setCalibration] = useState<Record<string, { name: string; min: number; max: number; factor: number; offset: number; thresholdMin: number; thresholdMax: number }>>({
-        CH1: { name: "Channel 1", min: 0, max: 100, factor: 1, offset: 0, thresholdMin: 0, thresholdMax: 100 },
-        CH2: { name: "Channel 2", min: 0, max: 100, factor: 1, offset: 0, thresholdMin: 0, thresholdMax: 100 },
-        CH3: { name: "Channel 3", min: 0, max: 100, factor: 1, offset: 0, thresholdMin: 0, thresholdMax: 100 },
-        CH4: { name: "Channel 4", min: 0, max: 100, factor: 1, offset: 0, thresholdMin: 0, thresholdMax: 100 },
-        CH5: { name: "Channel 5", min: 0, max: 100, factor: 1, offset: 0, thresholdMin: 0, thresholdMax: 100 },
-        CH6: { name: "Channel 6", min: 0, max: 100, factor: 1, offset: 0, thresholdMin: 0, thresholdMax: 100 },
+    const [calibration, setCalibration] = useState<Record<string, { name: string; min: number; max: number; operation: string; calibValue: number; thresholdMin: number; thresholdMax: number }>>({
+        CH1: { name: "Channel 1", min: 0, max: 100, operation: "add", calibValue: 0, thresholdMin: 0, thresholdMax: 100 },
+        CH2: { name: "Channel 2", min: 0, max: 100, operation: "add", calibValue: 0, thresholdMin: 0, thresholdMax: 100 },
+        CH3: { name: "Channel 3", min: 0, max: 100, operation: "add", calibValue: 0, thresholdMin: 0, thresholdMax: 100 },
+        CH4: { name: "Channel 4", min: 0, max: 100, operation: "add", calibValue: 0, thresholdMin: 0, thresholdMax: 100 },
+        CH5: { name: "Channel 5", min: 0, max: 100, operation: "add", calibValue: 0, thresholdMin: 0, thresholdMax: 100 },
+        CH6: { name: "Channel 6", min: 0, max: 100, operation: "add", calibValue: 0, thresholdMin: 0, thresholdMax: 100 },
     });
     const [showCalibration, setShowCalibration] = useState(false);
 
@@ -169,8 +169,21 @@ export default function DeviceConfigPage() {
                         if (cfg[`CH${i}_Name`]) updated[key].name = cfg[`CH${i}_Name`];
                         if (cfg[`CH${i}_Min`] !== undefined) updated[key].min = Number(cfg[`CH${i}_Min`]);
                         if (cfg[`CH${i}_Max`] !== undefined) updated[key].max = Number(cfg[`CH${i}_Max`]);
-                        if (cfg[`CH${i}_Factor`] !== undefined) updated[key].factor = Number(cfg[`CH${i}_Factor`]);
-                        if (cfg[`CH${i}_Offset`] !== undefined) updated[key].offset = Number(cfg[`CH${i}_Offset`]);
+                        
+                        let op = 'add';
+                        let cVal = 0;
+                        const f = cfg[`CH${i}_Factor`] !== undefined ? Number(cfg[`CH${i}_Factor`]) : 1;
+                        const o = cfg[`CH${i}_Offset`] !== undefined ? Number(cfg[`CH${i}_Offset`]) : 0;
+                        if (f === 1) {
+                            if (o < 0) { op = 'sub'; cVal = Math.abs(o); }
+                            else { op = 'add'; cVal = o; }
+                        } else {
+                            if (f < 1 && f > 0) { op = 'div'; cVal = 1 / f; }
+                            else { op = 'mul'; cVal = f; }
+                        }
+                        updated[key].operation = op;
+                        updated[key].calibValue = cVal;
+
                         if (cfg[`CH${i}_ThreshMin`] !== undefined) updated[key].thresholdMin = Number(cfg[`CH${i}_ThreshMin`]);
                         if (cfg[`CH${i}_ThreshMax`] !== undefined) updated[key].thresholdMax = Number(cfg[`CH${i}_ThreshMax`]);
                     }
@@ -196,11 +209,18 @@ export default function DeviceConfigPage() {
             for (let i = 1; i <= 6; i++) {
                 const key = `CH${i}`;
                 const ch = calibration[key];
+                let factor = 1;
+                let offset = 0;
+                if (ch.operation === 'add') { factor = 1; offset = ch.calibValue; }
+                if (ch.operation === 'sub') { factor = 1; offset = -ch.calibValue; }
+                if (ch.operation === 'mul') { factor = ch.calibValue; offset = 0; }
+                if (ch.operation === 'div') { factor = ch.calibValue !== 0 ? 1 / ch.calibValue : 1; offset = 0; }
+
                 deviceInput[`CH${i}_Name`] = ch.name;
                 deviceInput[`CH${i}_Min`] = ch.min;
                 deviceInput[`CH${i}_Max`] = ch.max;
-                deviceInput[`CH${i}_Factor`] = ch.factor;
-                deviceInput[`CH${i}_Offset`] = ch.offset;
+                deviceInput[`CH${i}_Factor`] = factor;
+                deviceInput[`CH${i}_Offset`] = offset;
                 deviceInput[`CH${i}_ThreshMin`] = ch.thresholdMin;
                 deviceInput[`CH${i}_ThreshMax`] = ch.thresholdMax;
             }
@@ -402,8 +422,8 @@ export default function DeviceConfigPage() {
                                                 <tr>
                                                     <th className="px-4 py-3 font-bold border-b border-border-subtle">Channel Name</th>
                                                     <th className="px-4 py-3 font-bold text-center border-b border-border-subtle">Range (Min - Max)</th>
-                                                    <th className="px-4 py-3 font-bold text-center border-b border-border-subtle">Calibration (Offset)</th>
-                                                    <th className="px-4 py-3 font-bold text-center border-b border-border-subtle">Factor</th>
+                                                    <th className="px-4 py-3 font-bold text-center border-b border-border-subtle">Operation</th>
+                                                    <th className="px-4 py-3 font-bold text-center border-b border-border-subtle">Value</th>
                                                     <th className="px-4 py-3 font-bold text-center border-b border-border-subtle">Threshold (Min - Max)</th>
                                                     <th className="px-4 py-3 font-bold text-right border-b border-border-subtle">Readings</th>
                                                     <th className="px-4 py-3 font-bold text-right border-b border-border-subtle">Calibrated<br/>Readings</th>
@@ -414,7 +434,11 @@ export default function DeviceConfigPage() {
                                                     const idx = parseInt(key.replace("CH", "")) - 1;
                                                     const chData = channels[idx];
                                                     const rawVal = chData?.value !== null && chData?.value !== undefined ? Number(chData.value) : 0;
-                                                    const calibratedVal = (rawVal * ch.factor) + ch.offset;
+                                                    let calibratedVal = rawVal;
+                                                    if (ch.operation === 'add') calibratedVal = rawVal + ch.calibValue;
+                                                    if (ch.operation === 'sub') calibratedVal = rawVal - ch.calibValue;
+                                                    if (ch.operation === 'mul') calibratedVal = rawVal * ch.calibValue;
+                                                    if (ch.operation === 'div') calibratedVal = ch.calibValue !== 0 ? rawVal / ch.calibValue : rawVal;
                                                     return (
                                                     <tr key={key} className="hover:bg-surface-muted/30 transition-colors">
                                                         <td className="px-4 py-3">
@@ -429,31 +453,31 @@ export default function DeviceConfigPage() {
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="flex items-center justify-center gap-2">
-                                                                <input type="number" value={ch.min} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], min: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
+                                                                <input type="number" min={0} onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault() }} value={ch.min} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], min: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
                                                                 <span className="text-text-muted font-bold">-</span>
-                                                                <input type="number" value={ch.max} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], max: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
+                                                                <input type="number" min={0} onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault() }} value={ch.max} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], max: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="flex justify-center">
-                                                                <input type="number" step="0.1" value={ch.offset} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], offset: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-bold text-primary focus:border-primary outline-none" />
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3">
-                                                            <div className="flex justify-center">
-                                                                <select value={ch.factor} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], factor: Number(e.target.value) } }))} className="w-28 px-1 py-1.5 rounded border border-border-subtle text-xs font-medium text-text-secondary focus:border-primary outline-none cursor-pointer bg-white">
-                                                                    <option value={1}>Addition (1x)</option>
-                                                                    <option value={10}>Multiplier (10x)</option>
-                                                                    <option value={0.1}>Division (0.1x)</option>
-                                                                    <option value={-1}>Invert (-1x)</option>
+                                                                <select value={ch.operation} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], operation: e.target.value } }))} className="w-28 px-1 py-1.5 rounded border border-border-subtle text-xs font-medium text-text-secondary focus:border-primary outline-none cursor-pointer bg-white">
+                                                                    <option value="add">Addition</option>
+                                                                    <option value="sub">Subtraction</option>
+                                                                    <option value="mul">Multiplication</option>
+                                                                    <option value="div">Division</option>
                                                                 </select>
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3">
+                                                            <div className="flex justify-center">
+                                                                <input type="number" min={0} onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault() }} step="0.1" value={ch.calibValue} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], calibValue: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-bold text-primary focus:border-primary outline-none" />
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
                                                             <div className="flex items-center justify-center gap-2">
-                                                                <input type="number" value={ch.thresholdMin} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], thresholdMin: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
+                                                                <input type="number" min={0} onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault() }} value={ch.thresholdMin} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], thresholdMin: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
                                                                 <span className="text-text-muted font-bold">-</span>
-                                                                <input type="number" value={ch.thresholdMax} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], thresholdMax: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
+                                                                <input type="number" min={0} onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault() }} value={ch.thresholdMax} onChange={(e) => setCalibration(p => ({ ...p, [key]: { ...p[key], thresholdMax: Number(e.target.value) } }))} className="w-16 px-2 py-1.5 rounded border border-border-subtle text-center text-sm font-mono focus:border-primary outline-none" />
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 text-right">
