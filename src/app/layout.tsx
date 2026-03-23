@@ -11,6 +11,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "ReFlow Console - Dashboard",
   description: "ReFlow Technologies - Industrial IoT Dashboard",
+  icons: {
+    icon: "/translogo.png",
+    apple: "/translogo.png",
+  },
 };
 
 export default function RootLayout({
