@@ -1,30 +1,44 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Plus } from "lucide-react";
-
-interface SharedProject {
-    id: string;
-    name: string;
-    owner: string;
-    role: "Editor" | "Viewer" | "Admin";
-    avatar?: string;
-}
-
-const sharedProjects: SharedProject[] = [
-    { id: "1", name: "Cooling System v2", owner: "Jane Doe", role: "Editor" },
-    { id: "2", name: "Grid Monitor Alpha", owner: "Robert Fox", role: "Viewer" },
-];
+import { useProjects } from "@/lib/ProjectsContext";
+import { getUserEmail } from "@/lib/api";
 
 const roleStyles: Record<string, string> = {
     Editor: "badge-editor",
     Viewer: "badge-viewer",
     Admin: "badge-admin",
+    EDITOR: "badge-editor",
+    VIEWER: "badge-viewer",
+    ADMIN: "badge-admin",
 };
 
-const avatarColors = ["bg-blue-500", "bg-purple-500", "bg-teal-500"];
+const avatarColors = ["bg-blue-500", "bg-purple-500", "bg-teal-500", "bg-orange-500", "bg-rose-500"];
 
 export default function SharedWidget() {
+    const { projects, loading } = useProjects();
+
+    const sharedProjects = useMemo(() => {
+        const userEmail = getUserEmail();
+        return projects
+            .filter((p) => p.createdBy?.email !== userEmail)
+            .map((p) => {
+                const myMembership = p.members?.find(
+                    (m: any) => m.user?.email === userEmail
+                );
+                return {
+                    id: p.id || p._id || "",
+                    name: p.name,
+                    owner: p.createdBy?.name || "Unknown",
+                    role: (myMembership?.role || "Viewer").charAt(0).toUpperCase() +
+                          (myMembership?.role || "Viewer").slice(1).toLowerCase(),
+                };
+            });
+    }, [projects]);
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -34,46 +48,71 @@ export default function SharedWidget() {
         >
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-text-primary">Shared with you</h3>
-                <button className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary-hover transition-colors">
+                <Link
+                    href="/shared"
+                    className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary-hover transition-colors"
+                >
                     <Plus className="w-4 h-4" />
-                </button>
+                </Link>
             </div>
 
             <div className="space-y-3">
-                {sharedProjects.map((project, i) => (
-                    <div
-                        key={project.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-muted transition-colors cursor-pointer"
-                    >
+                {loading ? (
+                    <div className="space-y-3 animate-pulse">
+                        {[1, 2].map((i) => (
+                            <div key={i} className="flex items-center gap-3 p-2">
+                                <div className="w-9 h-9 rounded-full bg-slate-100" />
+                                <div className="flex-1 space-y-1.5">
+                                    <div className="h-3 bg-slate-100 rounded w-3/4" />
+                                    <div className="h-2 bg-slate-100 rounded w-1/2" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : sharedProjects.length === 0 ? (
+                    <p className="text-xs text-text-muted text-center py-4">
+                        No projects shared with you yet.
+                    </p>
+                ) : (
+                    sharedProjects.slice(0, 4).map((project, i) => (
                         <div
-                            className={`w-9 h-9 rounded-full ${avatarColors[i % avatarColors.length]
-                                } flex items-center justify-center flex-shrink-0`}
+                            key={project.id}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-muted transition-colors cursor-pointer"
                         >
-                            <span className="text-xs font-bold text-white">
-                                {project.owner
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
+                            <div
+                                className={`w-9 h-9 rounded-full ${
+                                    avatarColors[i % avatarColors.length]
+                                } flex items-center justify-center flex-shrink-0`}
+                            >
+                                <span className="text-xs font-bold text-white">
+                                    {project.owner
+                                        .split(" ")
+                                        .map((n) => n[0])
+                                        .join("")}
+                                </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-text-primary truncate">
+                                    {project.name}
+                                </p>
+                                <p className="text-[11px] text-text-muted">
+                                    Owner: {project.owner}
+                                </p>
+                            </div>
+                            <span className={`badge ${roleStyles[project.role] || "badge-viewer"}`}>
+                                {project.role}
                             </span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-text-primary truncate">
-                                {project.name}
-                            </p>
-                            <p className="text-[11px] text-text-muted">
-                                Owner: {project.owner}
-                            </p>
-                        </div>
-                        <span className={`badge ${roleStyles[project.role]}`}>
-                            {project.role}
-                        </span>
-                    </div>
-                ))}
+                    ))
+                )}
             </div>
 
-            <button className="mt-3 w-full py-2 text-xs font-medium text-text-muted border border-border-subtle rounded-lg hover:bg-surface-muted transition-colors">
+            <Link
+                href="/shared"
+                className="mt-3 w-full py-2 text-xs font-medium text-text-muted border border-border-subtle rounded-lg hover:bg-surface-muted transition-colors block text-center"
+            >
                 View All Shared Projects
-            </button>
+            </Link>
         </motion.div>
     );
 }

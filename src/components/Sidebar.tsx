@@ -69,7 +69,7 @@ export default function Sidebar({ user }: SidebarProps) {
         }`}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center px-5 border-b border-border-subtle flex-shrink-0">
+      <div className="h-16 flex items-center justify-center px-5 border-b border-border-subtle flex-shrink-0">
         <img
           src="/translogo.png"
           alt="ReFlow Logo"
@@ -176,7 +176,7 @@ export default function Sidebar({ user }: SidebarProps) {
       {/* Collapse Toggle */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-20 w-6 h-6 bg-white shadow-md border border-border-subtle text-text-muted rounded-full flex items-center justify-center hover:bg-surface-muted transition-colors z-10"
+        className="absolute -right-3 top-[3.5rem] w-6 h-6 bg-white shadow-md border border-border-subtle text-text-muted rounded-full flex items-center justify-center hover:bg-surface-muted transition-colors z-10"
       >
         {isCollapsed ? (
           <ChevronRight className="w-3.5 h-3.5" />

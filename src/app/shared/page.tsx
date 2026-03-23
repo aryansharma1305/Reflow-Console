@@ -4,12 +4,12 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-    getAllProjects,
     shareProject,
     getUserEmail,
     getUserName,
     isAuthenticated,
 } from "@/lib/api";
+import { useProjects } from "@/lib/ProjectsContext";
 import {
     ExternalLink,
     X,
@@ -73,58 +73,45 @@ export default function SharedAccessPage() {
     const email = getUserEmail();
     const fullName = getUserName();
 
+    const { projects: cachedProjects } = useProjects();
+
     useEffect(() => {
-        async function fetchData() {
-            if (!isAuthenticated()) return;
+        if (!isAuthenticated()) return;
+        const userEmail = getUserEmail();
 
-            try {
-                const data = await getAllProjects();
-                const projectList = Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
-                const userEmail = getUserEmail();
+        // Projects I own (for share dropdown)
+        const owned = cachedProjects
+            .filter((p: any) => p.createdBy?.email === userEmail)
+            .map((p: any) => ({
+                id: p.id || p._id,
+                name: p.name,
+            }));
 
-                // Projects I own (for share dropdown)
-                const owned = projectList
-                    .filter((p: { createdBy?: { email?: string }; id?: string; _id?: string; name: string }) =>
-                        p.createdBy?.email === userEmail
-                    )
-                    .map((p: { id?: string; _id?: string; name: string }) => ({
-                        id: p.id || p._id,
-                        name: p.name,
-                    }));
-
-                if (owned.length > 0) {
-                    setOwnProjects(owned);
-                    setSelectedProject(owned[0].id || "");
-                }
-
-                // Projects shared with me
-                const shared = projectList
-                    .filter((p: { createdBy?: { email?: string; name?: string }; members?: { user?: { email?: string }; role?: string }[]; devices?: unknown[] }) =>
-                        p.createdBy?.email !== userEmail
-                    )
-                    .map((p: { id?: string; _id?: string; name: string; createdBy?: { email?: string; name?: string }; members?: { user?: { email?: string }; role?: string }[]; devices?: unknown[] }) => {
-                        const myMembership = p.members?.find(
-                            (m: { user?: { email?: string }; role?: string }) => m.user?.email === userEmail
-                        );
-                        return {
-                            id: p.id || p._id,
-                            name: p.name,
-                            owner: p.createdBy?.name || "Unknown",
-                            ownerEmail: p.createdBy?.email || "",
-                            role: (myMembership?.role || "Viewer") as SharedProject["role"],
-                            devices: p.devices?.length || 0,
-                            updatedAgo: "Recently",
-                        };
-                    });
-
-                setSharedProjects(shared);
-            } catch (err) {
-                console.error("Error fetching shared data:", err);
-            }
+        if (owned.length > 0) {
+            setOwnProjects(owned);
+            setSelectedProject(owned[0].id || "");
         }
 
-        fetchData();
-    }, []);
+        // Projects shared with me
+        const shared = cachedProjects
+            .filter((p: any) => p.createdBy?.email !== userEmail)
+            .map((p: any) => {
+                const myMembership = p.members?.find(
+                    (m: any) => m.user?.email === userEmail
+                );
+                return {
+                    id: p.id || p._id,
+                    name: p.name,
+                    owner: p.createdBy?.name || "Unknown",
+                    ownerEmail: p.createdBy?.email || "",
+                    role: (myMembership?.role || "Viewer") as SharedProject["role"],
+                    devices: p.devices?.length || 0,
+                    updatedAgo: "Recently",
+                };
+            });
+
+        setSharedProjects(shared);
+    }, [cachedProjects]);
 
     async function handleInvite() {
         if (!inviteEmail || !selectedProject) {

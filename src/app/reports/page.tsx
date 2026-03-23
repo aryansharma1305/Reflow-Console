@@ -4,13 +4,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-    getAllProjects,
-    getProjectDevices,
     getUserEmail,
     getUserName,
     isAuthenticated,
     exportDeviceData,
 } from "@/lib/api";
+import { useProjects } from "@/lib/ProjectsContext";
 import { useMqttStatus } from "@/lib/useMqttDevice";
 import {
     FileDown,
@@ -112,73 +111,33 @@ export default function ReportsPage() {
 
     const chartRef = useRef<HTMLDivElement>(null);
 
-    // Load projects and devices
+    // Load devices from global cache
+    const { projects: cachedProjects, devices: cachedDevices, loading: cacheLoading } = useProjects();
+
     useEffect(() => {
-        async function fetchData() {
-            if (!isAuthenticated()) return;
-            try {
-                const data = await getAllProjects();
-                const projectList = Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
-                console.log("[Reports] Projects:", projectList.length);
-                setProjects(projectList);
+        if (cacheLoading) return;
 
-                // Each project fetch returns its own bucket — no closure mutation
-                const results = await Promise.allSettled(
-                    projectList.map(async (p: Project) => {
-                        const pId = p.id || p._id || "";
-                        const bucket: Device[] = [];
+        setProjects(cachedProjects as any);
 
-                        // Fast path: devices nested in project
-                        (p.devices || []).forEach((d: Device) => {
-                            const dd = d as unknown as Record<string, string>;
-                            const sn = d.serialNumber || dd.serial_no || dd.serialNo;
-                            if (sn) bucket.push({ id: d.id, serialNumber: sn, name: d.name || sn });
-                        });
-
-                        // Full path: call getProjectDevices
-                        if (pId) {
-                            const res = await getProjectDevices(pId);
-                            console.log(`[Reports] Project ${pId}:`, res);
-                            const list: Record<string, string>[] = Array.isArray(res) ? res : (res?.data?.devices || res?.devices || res?.data || []);
-                            if (Array.isArray(list)) {
-                                list.forEach((d: Record<string, string>) => {
-                                    const sn = d.serialNumber || d.serial_no || d.serialNo || d.serial_number || d.id || d._id;
-                                    if (sn && !bucket.find((x) => x.serialNumber === sn)) {
-                                        bucket.push({ id: d.id, serialNumber: sn, name: d.name || sn });
-                                    }
-                                });
-                            }
-                        }
-                        return bucket;
-                    })
-                );
-
-                const seen = new Set<string>();
-                const devices: Device[] = [];
-                results.forEach((r) => {
-                    if (r.status === "fulfilled") {
-                        r.value.forEach((d: Device) => {
-                            const sn = d.serialNumber || "";
-                            if (sn && !seen.has(sn)) { seen.add(sn); devices.push(d); }
-                        });
-                    }
-                });
-
-                console.log("[Reports] Devices found:", devices.length, devices.map(d => d.serialNumber));
-                setAllDevices(devices);
-                if (devices.length > 0) {
-                    const first = devices[0].serialNumber || "";
-                    setSelectedDevice(first);
-                    setScheduleDevice(first);
-                }
-            } catch (err) {
-                console.error("[Reports] Error:", err);
-            } finally {
-                setLoading(false);
+        // Dedupe by serialNumber
+        const seen = new Set<string>();
+        const devices: Device[] = [];
+        cachedDevices.forEach((d: any) => {
+            const sn = d.serialNumber || d.serial_no || d.serialNo || d.serial_number || d.id || d._id || "";
+            if (sn && !seen.has(sn)) {
+                seen.add(sn);
+                devices.push({ id: d.id || d._id, serialNumber: sn, name: d.name || sn });
             }
+        });
+
+        setAllDevices(devices);
+        if (devices.length > 0) {
+            const first = devices[0].serialNumber || "";
+            setSelectedDevice(first);
+            setScheduleDevice(first);
         }
-        fetchData();
-    }, []);
+        setLoading(false);
+    }, [cacheLoading, cachedProjects, cachedDevices]);
 
     // Load schedules for selected device
     useEffect(() => {

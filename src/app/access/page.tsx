@@ -200,7 +200,7 @@ export default function AccessPage() {
         }
     };
 
-    if (loading) return <LogoLoader text="Loading access settings..." />;
+    // Layout renders instantly; content shows inline loading state
 
     const isCurrentUserOwner = members.find(m =>
         m.email === email && ["OWNER", "ADMIN"].includes(m.role)

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
-import { getAllProjects, getProjectDevices, getUserEmail, getUserName, isAuthenticated, exportDeviceData } from "@/lib/api";
+import { getUserEmail, getUserName, isAuthenticated, exportDeviceData } from "@/lib/api";
+import { useProjects } from "@/lib/ProjectsContext";
 import { useMqttDevice, useMqttStatus } from "@/lib/useMqttDevice";
 import { CHART_CONFIG } from "@/config/constants";
 import {
@@ -131,80 +132,31 @@ export default function AnalyticsPage() {
         setEndDate(end.toISOString().split("T")[0]);
     }, []);
 
-    // Load all devices from all projects (same pattern as working Devices page)
+    // Load devices from global cache instead of making API calls
+    const { devices: cachedDevices, loading: cacheLoading } = useProjects();
+
     useEffect(() => {
-        async function fetchDevices() {
-            if (!isAuthenticated()) return;
-            try {
-                const data = await getAllProjects();
-                console.log("[Analytics] getAllProjects response:", data);
-                
-                // Extract projects from response - match the Devices page logic
-                const projectList: { id?: string; _id?: string; name: string }[] =
-                    Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
-                
-                console.log("[Analytics] Projects loaded:", projectList.length, projectList);
+        if (cacheLoading) return;
 
-                if (!Array.isArray(projectList) || projectList.length === 0) {
-                    console.warn("[Analytics] No projects found or invalid format:", projectList);
-                    setLoadError("No projects found. Create a project first.");
-                    setLoading(false);
-                    return;
-                }
-
-                const results = await Promise.allSettled(
-                    projectList.map(async (p) => {
-                        const pId = p.id || p._id || "";
-                        if (!pId) {
-                            console.warn("[Analytics] Project has no ID:", p);
-                            return [];
-                        }
-                        const res = await getProjectDevices(pId);
-                        console.log(`[Analytics] Project ${pId} devices response:`, res);
-                        const list: any[] = res?.data?.devices || res?.devices || [];
-                        console.log(`[Analytics] Project ${pId} device list:`, list);
-                        
-                        const mapped = list.map((d) => {
-                            const sn = d.serialNumber || d.serial_no || d.serialNo || d.serial_number || d.id || d._id || "";
-                            console.log(`[Analytics] Device - ID: ${d.id || d._id}, Serial: ${sn}, Name: ${d.name}`);
-                            return { id: d.id || d._id, serialNumber: sn, name: d.name || sn };
-                        }).filter((d) => d.serialNumber);
-                        
-                        console.log(`[Analytics] Mapped devices for project ${pId}:`, mapped);
-                        return mapped;
-                    })
-                );
-
-                // Flatten & dedupe by serialNumber
-                const seen = new Set<string>();
-                const devices: Device[] = [];
-                results.forEach((r) => {
-                    if (r.status === "fulfilled") {
-                        r.value.forEach((d) => {
-                            if (d.serialNumber && !seen.has(d.serialNumber)) {
-                                seen.add(d.serialNumber);
-                                devices.push(d);
-                            }
-                        });
-                    }
-                });
-
-                console.log("[Analytics] Total devices found:", devices.length, devices.map(d => d.serialNumber));
-                setAllDevices(devices);
-                if (devices.length > 0) {
-                    setSelectedDevice(devices[0].serialNumber || "");
-                } else {
-                    setLoadError("No devices found. Add a device from the Devices page first.");
-                }
-            } catch (err) {
-                console.error("[Analytics] Error loading devices:", err);
-                setLoadError("Failed to load devices. Check your connection.");
-            } finally {
-                setLoading(false);
+        // Dedupe by serialNumber
+        const seen = new Set<string>();
+        const devices: Device[] = [];
+        cachedDevices.forEach((d: any) => {
+            const sn = d.serialNumber || d.serial_no || d.serialNo || d.serial_number || d.id || d._id || "";
+            if (sn && !seen.has(sn)) {
+                seen.add(sn);
+                devices.push({ id: d.id || d._id, serialNumber: sn, name: d.name || sn });
             }
+        });
+
+        setAllDevices(devices);
+        if (devices.length > 0) {
+            setSelectedDevice(devices[0].serialNumber || "");
+        } else {
+            setLoadError("No devices found. Add a device from the Devices page first.");
         }
-        fetchDevices();
-    }, []);
+        setLoading(false);
+    }, [cacheLoading, cachedDevices]);
 
     // Initialise channel visibility when keys change
     useEffect(() => {

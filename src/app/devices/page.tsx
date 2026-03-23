@@ -1,37 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
-import LogoLoader from "@/components/LogoLoader";
 import {
-    getAllProjects,
-    getProjectDevices,
     getUserEmail,
     getUserName,
     isAuthenticated,
 } from "@/lib/api";
+import { useProjects } from "@/lib/ProjectsContext";
 import { useMqttStatus } from "@/lib/useMqttDevice";
 import { Cpu, Plus, Search, ChevronRight, RefreshCw } from "lucide-react";
-
-interface Device {
-    id?: string;
-    _id?: string;
-    serial_no?: string;
-    serialNumber?: string;
-    name?: string;
-    description?: string;
-    projectName?: string;
-    projectId?: string;
-}
-
-interface Project {
-    id?: string;
-    _id?: string;
-    name: string;
-    devices?: Device[];
-}
 
 // ── Per-row MQTT status badge ────────────────────────────────────
 function DeviceStatusBadge({ serial }: { serial: string }) {
@@ -69,62 +49,23 @@ export default function DevicesPage() {
     const email = getUserEmail();
     const fullName = getUserName();
 
-    const [devices, setDevices] = useState<Device[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { devices, loading, error: cacheError, refresh } = useProjects();
     const [search, setSearch] = useState("");
-    const [refreshKey, setRefreshKey] = useState(0);
+    const [localError] = useState<string | null>(null);
 
-    const loadDevices = useCallback(async () => {
-        if (!isAuthenticated()) { setLoading(false); return; }
-        setLoading(true);
-        try {
-            const data = await getAllProjects();
-            const projects: Project[] = Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
+    const error = localError || cacheError;
 
-            const results = await Promise.allSettled(
-                projects.map(async (p) => {
-                    const pId = p.id || p._id || "";
-                    const res = await getProjectDevices(pId);
-                    const list = res?.data?.devices || res?.devices || [];
-                    return list.map((d: {
-                        id?: string; _id?: string; name?: string;
-                        serialNumber?: string; serial_no?: string;
-                        status?: string; description?: string;
-                    }) => ({
-                        ...d,
-                        projectName: p.name,
-                        projectId: pId,
-                    }));
-                })
-            );
-
-            const flat: Device[] = results
-                .filter((r): r is PromiseFulfilledResult<Device[]> => r.status === "fulfilled")
-                .flatMap((r) => r.value);
-
-            setDevices(flat);
-            setError(null);
-        } catch (err) {
-            console.error("Failed to fetch devices:", err);
-            setError("Could not load devices. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    }, [refreshKey]);
-
-    useEffect(() => { loadDevices(); }, [loadDevices]);
-
-    // Loading state is now inline so the layout transition is instant
-
-    const filtered = devices.filter((d) => {
+    const filtered = useMemo(() => {
         const q = search.toLowerCase();
-        return (
-            d.name?.toLowerCase().includes(q) ||
-            (d.serial_no || d.serialNumber || "").toLowerCase().includes(q) ||
-            d.projectName?.toLowerCase().includes(q)
-        );
-    });
+        return devices.filter((d) => {
+            const dev = (d as any).device || d;
+            return (
+                dev.name?.toLowerCase().includes(q) ||
+                (dev.serial_no || dev.serialNumber || "").toLowerCase().includes(q) ||
+                d.projectName?.toLowerCase().includes(q)
+            );
+        });
+    }, [devices, search]);
 
     return (
         <DashboardLayout
@@ -148,7 +89,7 @@ export default function DevicesPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setRefreshKey((k) => k + 1)}
+                            onClick={() => refresh()}
                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-surface-muted transition-colors"
                         >
                             <RefreshCw className="w-4 h-4" />
@@ -164,7 +105,7 @@ export default function DevicesPage() {
                     </div>
                 </motion.div>
 
-                {/* Summary stats — counts are shown from fetched list */}
+                {/* Summary stats */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.05 }}
@@ -213,7 +154,11 @@ export default function DevicesPage() {
                         <span></span>
                     </div>
 
-                    {filtered.length === 0 ? (
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <p className="text-sm text-text-muted">Loading devices...</p>
+                        </div>
+                    ) : filtered.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                             <div className="w-14 h-14 rounded-2xl bg-surface-muted flex items-center justify-center mb-4">
                                 <Cpu className="w-7 h-7 text-text-muted" />
@@ -234,7 +179,6 @@ export default function DevicesPage() {
                         </div>
                     ) : (
                         filtered.map((device, i) => {
-                            // Robust extraction depending on how the backend nests it
                             const d = (device as any).device || device;
                             const serial = d.serial_no || d.serialNumber || "—";
                             const devId = d.id || d._id || serial;

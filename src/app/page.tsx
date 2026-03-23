@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -13,12 +13,11 @@ import LogoLoader from "@/components/LogoLoader";
 import OrganizationSetup from "@/components/OrganizationSetup";
 import { POLLING_CONFIG } from "@/config/constants";
 import {
-  getAllProjects,
-  getProjectDevices,
   getUserEmail,
   getUserName,
   isAuthenticated,
 } from "@/lib/api";
+import { useProjects } from "@/lib/ProjectsContext";
 import { useOrgGuard } from "@/lib/useOrgGuard";
 import {
   FolderOpen,
@@ -29,38 +28,6 @@ import {
   Filter,
   Wifi,
 } from "lucide-react";
-
-interface User {
-  name?: string;
-  email?: string;
-  role?: string;
-}
-
-interface Device {
-  id?: string;
-  _id?: string;
-  serial_no?: string;
-  serialNumber?: string;
-  name?: string;
-}
-
-interface Project {
-  id?: string;
-  _id?: string;
-  name: string;
-  devices?: Device[];
-  owner?: string;
-  status?: string;
-  createdBy?: { name?: string; email?: string };
-  members?: { user?: { email?: string }; role?: string }[];
-}
-
-interface Stats {
-  totalProjects: number;
-  totalDevices: number;
-  activeDevices: number;
-  sharedProjects: number;
-}
 
 // ── Quick MQTT status check ──────────────────────────────────────
 async function checkDeviceOnline(serialId: string): Promise<boolean> {
@@ -84,25 +51,14 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [showOrgSetup, setShowOrgSetup] = useState(false);
   const { hasOrg, orgChecked } = useOrgGuard();
-  const [user, setUser] = useState<User | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({
-    totalProjects: 0,
-    totalDevices: 0,
-    activeDevices: 0,
-    sharedProjects: 0,
-  });
+  const { projects, devices, loading, error } = useProjects();
   const [mqttChecking, setMqttChecking] = useState(false);
+  const [activeDevices, setActiveDevices] = useState(0);
+
+  const userName = getUserName();
+  const userEmail = getUserEmail();
 
   useEffect(() => {
-    const email = getUserEmail();
-    const name = getUserName();
-    const token = isAuthenticated();
-    if (token) {
-      setUser({ name: name || "User", email: email || "user@example.com", role: "User" });
-    }
     if (searchParams.get("setup") === "org") {
       const skipped = typeof window !== "undefined" && sessionStorage.getItem("org_setup_skipped");
       if (!skipped) setShowOrgSetup(true);
@@ -110,117 +66,53 @@ function DashboardContent() {
     }
   }, [searchParams]);
 
+  // ── MQTT online check (Non-blocking) ─────────────────────────
   useEffect(() => {
-    async function fetchData() {
-      const timeoutId = setTimeout(() => { if (loading) setLoading(false); }, 8000);
-      try {
-        if (!isAuthenticated()) { router.push("/login"); return; }
+    if (loading || devices.length === 0) return;
 
-        const data = await getAllProjects();
-        const projectList: Project[] = Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
-        setProjects(projectList);
+    const allSerials = devices
+      .map((d) => d.serialNumber || d.serial_no || d.id || d._id)
+      .filter(Boolean) as string[];
 
-        // Collect all devices with their serial numbers
-        const allDeviceSerials: string[] = [];
+    if (allSerials.length === 0) return;
 
-        // Fetch devices for all projects concurrently to fix N+1 latency
-        const devicePromises = projectList.map(async (p) => {
-          const pId = p.id || p._id || "";
-          if (!pId) return [];
-          try {
-            const res = await getProjectDevices(pId);
-            return res?.data?.devices || res?.devices || [];
-          } catch {
-            return p.devices || []; // fallback to nested
-          }
-        });
-
-        const projectDevices = await Promise.all(devicePromises);
-
-        projectList.forEach((p, idx) => {
-          const devs = projectDevices[idx];
-          p.devices = devs.length > 0 ? devs : p.devices || [];
-          (p.devices || []).forEach((d: Device) => {
-            const serial = d.serialNumber || d.serial_no || d.id || d._id;
-            if (serial && !allDeviceSerials.includes(serial)) allDeviceSerials.push(serial);
-          });
-        });
-
-        setProjects(projectList);
-
-        const totalDevices = allDeviceSerials.length;
-
-        setStats({
-          totalProjects: projectList.length,
-          totalDevices,
-          activeDevices: 0, // will be updated by MQTT check below
-          sharedProjects: projectList.filter(
-            (p: Project) => p.createdBy?.email !== getUserEmail()
-          ).length,
-        });
-        setError(null);
-
-        // Turn off the loading spinner NOW before the slow MQTT checks
-        setLoading(false);
-        clearTimeout(timeoutId);
-
-        // ── MQTT online check (Non-blocking) ─────────────────────────────────
-        if (allDeviceSerials.length > 0) {
-          setMqttChecking(true);
-          const results = await Promise.allSettled(
-            allDeviceSerials.map(checkDeviceOnline)
-          );
-          const onlineCount = results.filter(
-            (r) => r.status === "fulfilled" && r.value === true
-          ).length;
-          setStats((prev) => ({ ...prev, activeDevices: onlineCount }));
-          setMqttChecking(false);
-        }
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Could not connect to backend. Please check your connection.");
-        setProjects([]);
-        setLoading(false);
-        clearTimeout(timeoutId);
-      }
-    }
-    fetchData();
-    // Re-check MQTT status
-    const mqttRefresh = setInterval(async () => {
-      if (!isAuthenticated()) return;
-      const data = await getAllProjects().catch(() => null);
-      if (!data) return;
-      const projectList: Project[] = Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
-      const serials: string[] = [];
-      projectList.forEach((p) => {
-        (p.devices || []).forEach((d) => {
-          const s = d.serialNumber || d.serial_no || d.id || d._id;
-          if (s) serials.push(s);
-        });
-      });
-      if (serials.length === 0) return;
-      const results = await Promise.allSettled(serials.map(checkDeviceOnline));
+    setMqttChecking(true);
+    Promise.allSettled(allSerials.map(checkDeviceOnline)).then((results) => {
       const onlineCount = results.filter(
         (r) => r.status === "fulfilled" && r.value === true
       ).length;
-      setStats((prev) => ({
-        ...prev,
-        totalDevices: serials.length,
-        activeDevices: onlineCount,
-      }));
+      setActiveDevices(onlineCount);
+      setMqttChecking(false);
+    });
+
+    // Periodic MQTT refresh
+    const interval = setInterval(async () => {
+      const results = await Promise.allSettled(allSerials.map(checkDeviceOnline));
+      const onlineCount = results.filter(
+        (r) => r.status === "fulfilled" && r.value === true
+      ).length;
+      setActiveDevices(onlineCount);
     }, POLLING_CONFIG.DASHBOARD_MQTT_REFRESH);
 
-    return () => clearInterval(mqttRefresh);
-  }, []);
+    return () => clearInterval(interval);
+  }, [loading, devices]);
 
-  // Loading state is now inline so the layout transition is instant
+  const stats = useMemo(() => ({
+    totalProjects: projects.length,
+    totalDevices: devices.length,
+    activeDevices,
+    sharedProjects: projects.filter(
+      (p) => p.createdBy?.email !== getUserEmail()
+    ).length,
+  }), [projects, devices, activeDevices]);
 
-  const handleOrgSetupComplete = () => setShowOrgSetup(false);
-  const firstName = user?.name?.split(" ")[0] || "User";
+  const firstName = userName?.split(" ")[0] || "User";
   const uptimePct =
     stats.totalDevices > 0
       ? Math.round((stats.activeDevices / stats.totalDevices) * 100)
       : 0;
+
+  const handleOrgSetupComplete = () => setShowOrgSetup(false);
 
   return (
     <>
@@ -228,7 +120,7 @@ function DashboardContent() {
       <DashboardLayout
         title="Overview"
         breadcrumbs={[{ label: "Workspace", href: "/" }, { label: "Overview" }]}
-        user={user}
+        user={{ name: userName || "", email: userEmail || "" }}
       >
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
           {/* Main content */}
@@ -332,7 +224,11 @@ function DashboardContent() {
                 </Link>
               </div>
 
-              {projects.length === 0 ? (
+              {loading ? (
+                <div className="card p-8 text-center">
+                  <p className="text-text-muted text-sm">Loading projects...</p>
+                </div>
+              ) : projects.length === 0 ? (
                 <div className="card p-8 text-center">
                   <p className="text-text-muted text-sm">
                     No projects yet. Create your first project to get started.

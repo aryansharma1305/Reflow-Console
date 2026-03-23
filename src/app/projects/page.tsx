@@ -1,42 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import ProjectCard from "@/components/ProjectCard";
-import LogoLoader from "@/components/LogoLoader";
 import {
-  getAllProjects,
   getUserEmail,
   getUserName,
-  isAuthenticated,
-  getProjectDevices,
 } from "@/lib/api";
 import { useOrgGuard } from "@/lib/useOrgGuard";
+import { useProjects } from "@/lib/ProjectsContext";
 import OrganizationSetup from "@/components/OrganizationSetup";
 import { Plus, ArrowRight } from "lucide-react";
 
-interface Project {
-  id?: string;
-  _id?: string;
-  name: string;
-  description?: string;
-  devices?: { serial_no?: string; name?: string }[];
-  owner?: string;
-  status?: string;
-  createdBy?: { name?: string; email?: string };
-  members?: { user?: { email?: string; name?: string }; role?: string }[];
-  updatedAt?: string;
-}
-
-
 export default function ProjectsPage() {
   const router = useRouter();
-  const [ownProjects, setOwnProjects] = useState<Project[]>([]);
-  const [sharedProjects, setSharedProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const { projects, loading, error } = useProjects();
   const [showOrgSetup, setShowOrgSetup] = useState(false);
 
   const { hasOrg, orgChecked } = useOrgGuard();
@@ -44,60 +24,19 @@ export default function ProjectsPage() {
   const email = getUserEmail();
   const fullName = getUserName();
 
-  useEffect(() => {
-    async function fetchProjects() {
-      if (!isAuthenticated()) {
-        router.push("/login");
-        return;
-      }
-
-      try {
-        const data = await getAllProjects();
-        const projectList = Array.isArray(data) ? data : (data?.data?.projects || data?.projects || data?.data || []);
-        const userEmail = getUserEmail();
-
-        // Fetch devices for each project to make the count dynamic
-        const projectsWithDevices = await Promise.all(
-          projectList.map(async (p: Project) => {
-            try {
-              const projId = p.id || p._id;
-              if (projId) {
-                const devsData = await getProjectDevices(projId);
-                const devs = devsData?.data?.devices || devsData?.devices || [];
-                return { ...p, devices: devs };
-              }
-            } catch (err) {
-              console.error(`Failed to fetch devices for project ${p.id || p._id}`, err);
-            }
-            return p;
-          })
-        );
-
-        // Separate owned vs shared
-        const owned = projectsWithDevices.filter(
-          (p: Project) => p.createdBy?.email === userEmail
-        );
-        const shared = projectsWithDevices.filter(
-          (p: Project) => p.createdBy?.email !== userEmail
-        );
-
-        setOwnProjects(owned.length > 0 ? owned : projectsWithDevices);
-        setSharedProjects(shared);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching projects:", err);
-        setError("Could not connect to backend. Please check your connection.");
-        setOwnProjects([]);
-        setSharedProjects([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchProjects();
-  }, []);
-
-  // Loading state is now inline so the layout transition is instant
+  const { ownProjects, sharedProjects } = useMemo(() => {
+    const userEmail = getUserEmail();
+    const owned = projects.filter(
+      (p) => p.createdBy?.email === userEmail
+    );
+    const shared = projects.filter(
+      (p) => p.createdBy?.email !== userEmail
+    );
+    return {
+      ownProjects: owned.length > 0 ? owned : projects,
+      sharedProjects: shared,
+    };
+  }, [projects]);
 
   // Show org setup modal when triggered
   if (showOrgSetup) {
@@ -166,7 +105,11 @@ export default function ProjectsPage() {
             </button>
           </div>
 
-          {ownProjects.length === 0 ? (
+          {loading ? (
+            <div className="card p-8 text-center">
+              <p className="text-text-muted text-sm">Loading projects...</p>
+            </div>
+          ) : ownProjects.length === 0 ? (
             <div className="card p-8 text-center">
               <p className="text-text-muted text-sm">No projects yet. Create your first project!</p>
             </div>
