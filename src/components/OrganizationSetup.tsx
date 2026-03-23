@@ -70,8 +70,8 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
             } else {
                 setError(data?.message || data?.error || "Failed to create organization. Please try again.");
             }
-        } catch {
-            setError("An unexpected error occurred. Please try again.");
+        } catch (err: any) {
+            setError(err.message || "An unexpected error occurred. Please try again.");
         } finally {
             setLoading(false);
         }

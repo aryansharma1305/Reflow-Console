@@ -30,6 +30,22 @@ function getHeaders(): HeadersInit {
     };
 }
 
+
+async function handleResponse(res: Response) {
+    let data;
+    try {
+        data = await res.json();
+    } catch {
+        data = null;
+    }
+    
+    if (!res.ok || (data && data.success === false)) {
+        throw new Error(data?.message || data?.error || `HTTP error ${res.status}`);
+    }
+    
+    return data;
+}
+
 // ──────────────────────────────
 // Auth
 // ──────────────────────────────
@@ -40,7 +56,7 @@ export async function signup(email: string, name: string, password: string, cont
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, name, password, ...(contactNumber ? { contactNumber } : {}) }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function login(email: string, password: string) {
@@ -49,7 +65,7 @@ export async function login(email: string, password: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function generateOTP(email: string, action: string = "signup") {
@@ -58,7 +74,7 @@ export async function generateOTP(email: string, action: string = "signup") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, action }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function verifyOTP(email: string, verificationCode: string) {
@@ -67,7 +83,7 @@ export async function verifyOTP(email: string, verificationCode: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, verificationCode }),
     });
-    const data = await res.json();
+    const data = await handleResponse(res);
     // Auto-save token with both sessionStorage and cookies
     if (data?.data?.token) {
         saveToken(data.data.token);
@@ -83,8 +99,8 @@ export async function getOrganization() {
     const res = await fetch(`${BASE_URL}/organization`, {
         headers: getHeaders(),
     });
-    const data = await res.json();
-    return { ok: res.ok, status: res.status, ...data };
+    const data = await handleResponse(res);
+    return { ok: true, status: res.status, ...data };
 }
 
 export async function createOrganization(name: string, description: string) {
@@ -93,7 +109,16 @@ export async function createOrganization(name: string, description: string) {
         headers: getHeaders(),
         body: JSON.stringify({ name, description }),
     });
-    return res.json();
+    return handleResponse(res);
+}
+
+export async function updateOrganization(data: { name?: string; description?: string }) {
+    const res = await fetch(`${BASE_URL}/organization`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
 }
 
 export async function inviteToOrganization(email: string, role: string = "MEMBER") {
@@ -102,7 +127,7 @@ export async function inviteToOrganization(email: string, role: string = "MEMBER
         headers: getHeaders(),
         body: JSON.stringify({ email, role }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function removeMember(memberId: string) {
@@ -110,7 +135,7 @@ export async function removeMember(memberId: string) {
         method: "DELETE",
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function leaveOrganization() {
@@ -118,7 +143,7 @@ export async function leaveOrganization() {
         method: "POST",
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function transferOwnership(newOwnerId: string) {
@@ -127,14 +152,14 @@ export async function transferOwnership(newOwnerId: string) {
         headers: getHeaders(),
         body: JSON.stringify({ newOwnerId }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function getOrganizationActivities() {
     const res = await fetch(`${BASE_URL}/organization/activities`, {
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 // ──────────────────────────────
@@ -145,7 +170,7 @@ export async function getAllProjects() {
     const res = await fetch(`${BASE_URL}/projects`, {
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function createProject(name: string, description: string) {
@@ -154,7 +179,16 @@ export async function createProject(name: string, description: string) {
         headers: getHeaders(),
         body: JSON.stringify({ name, description }),
     });
-    return res.json();
+    return handleResponse(res);
+}
+
+export async function updateProject(projectId: string, data: { name?: string; description?: string }) {
+    const res = await fetch(`${BASE_URL}/project/${projectId}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
 }
 
 export async function deleteProject(projectId: string) {
@@ -162,7 +196,7 @@ export async function deleteProject(projectId: string) {
         method: "DELETE",
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function shareProject(projectId: string, userEmail: string, role: string = "EDITOR") {
@@ -171,7 +205,7 @@ export async function shareProject(projectId: string, userEmail: string, role: s
         headers: getHeaders(),
         body: JSON.stringify({ userEmail, role }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 // ──────────────────────────────
@@ -182,14 +216,14 @@ export async function getProjectDevices(projectId: string) {
     const res = await fetch(`${BASE_URL}/project/${projectId}/devices`, {
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function getDeviceDetails(deviceId: string) {
     const res = await fetch(`${BASE_URL}/device/${deviceId}`, {
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function createDevice(
@@ -204,7 +238,8 @@ export async function createDevice(
         headers: getHeaders(),
         body: JSON.stringify({ serialNumber, subscriptionKey, name, description }),
     });
-    return res.json();
+    
+    return handleResponse(res);
 }
 
 export async function updateDevice(deviceId: string, data: { name?: string; description?: string }) {
@@ -213,7 +248,7 @@ export async function updateDevice(deviceId: string, data: { name?: string; desc
         headers: getHeaders(),
         body: JSON.stringify(data),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function moveDevice(deviceId: string, newProjectId: string) {
@@ -222,7 +257,7 @@ export async function moveDevice(deviceId: string, newProjectId: string) {
         headers: getHeaders(),
         body: JSON.stringify({ newProjectId }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function deleteDevice(deviceId: string) {
@@ -230,7 +265,7 @@ export async function deleteDevice(deviceId: string) {
         method: "DELETE",
         headers: getHeaders(),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 export async function exportDeviceData(deviceId: string, startDate: string, endDate: string) {
@@ -239,7 +274,7 @@ export async function exportDeviceData(deviceId: string, startDate: string, endD
         headers: getHeaders(),
         body: JSON.stringify({ startDate, endDate }),
     });
-    return res.json();
+    return handleResponse(res);
 }
 
 // ──────────────────────────────
@@ -248,7 +283,7 @@ export async function exportDeviceData(deviceId: string, startDate: string, endD
 
 export async function healthCheck() {
     const res = await fetch(`${BASE_URL}/health`);
-    return res.json();
+    return handleResponse(res);
 }
 
 // ──────────────────────────────

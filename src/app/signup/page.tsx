@@ -50,9 +50,9 @@ export default function SignupPage() {
                 setInfo("Account created! Please log in to continue.");
                 setTimeout(() => router.push("/login"), 2000);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Signup error:", err);
-            setError("An unexpected error occurred. Please try again.");
+            setError(err.message || "An unexpected error occurred. Please try again.");
         } finally {
             setLoading(false);
         }
@@ -80,9 +80,9 @@ export default function SignupPage() {
             } else {
                 setError(result?.message || result?.data?.message || "OTP verification failed.");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("OTP verify error:", err);
-            setError("Verification failed. Please try again.");
+            setError(err.message || "Verification failed. Please try again.");
         } finally {
             setLoading(false);
         }

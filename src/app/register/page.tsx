@@ -74,9 +74,9 @@ export default function RegisterPage() {
             } else {
                 setError(result.message || result.error || "Registration failed. Please try again.");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Registration error:", err);
-            setError("An unexpected error occurred. Please try again.");
+            setError(err.message || "An unexpected error occurred. Please try again.");
         } finally {
             setLoading(false);
         }

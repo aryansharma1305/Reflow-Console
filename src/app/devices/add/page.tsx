@@ -74,35 +74,20 @@ function AddDeviceContent() {
         setError(null);
 
         try {
-            // Step 1: Verify secret key
-            const verifyRes = await fetch("/api/get-secret-key", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    device_serial_number: serialNumber,
-                    secret_key: subscriptionKey,
-                }),
-            });
-
-            const verifyData = await verifyRes.json();
-
-            if (verifyData.status !== "verified") {
-                setError("Invalid serial number or subscription key. Please verify your device credentials.");
-                setLoading(false);
-                return;
-            }
-
-            // Step 2: Register device
+            // Register device directly without local secret key verification
             const result = await createDevice(selectedProjectId, serialNumber, subscriptionKey, deviceName, description);
-            if (result?.error || result?.message?.toLowerCase().includes("error")) {
-                setError(result.error || result.message || "Failed to register device.");
+            
+            // If the API returns success: false or an error message (even on 200 OK)
+            if (result?.success === false || result?.error || result?.message?.toLowerCase().includes("error")) {
+                setError(result?.message || result?.error || "Failed to register device.");
                 return;
             }
+            
             setSuccess(true);
             setTimeout(() => router.push(`/projects/${selectedProjectId}`), 1500);
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error registering device:", err);
-            setError("Failed to register device. Please check your details and try again.");
+            setError(err.message || "Failed to register device. Please check your details and try again.");
         } finally {
             setLoading(false);
         }

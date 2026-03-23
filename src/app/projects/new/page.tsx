@@ -67,9 +67,9 @@ export default function NewProjectPage() {
                     router.push("/projects");
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error creating project:", err);
-            setError("Failed to create project. Please try again.");
+            setError(err.message || "Failed to create project. Please try again.");
         } finally {
             setLoading(false);
         }

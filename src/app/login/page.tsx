@@ -50,9 +50,9 @@ export default function LoginPage() {
                     "Login failed. Please check your credentials.";
                 setError(errorMsg);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Login error:", err);
-            setError("Could not connect to the server. Please try again.");
+            setError(err.message || "Could not connect to the server. Please try again.");
         } finally {
             setLoading(false);
         }
