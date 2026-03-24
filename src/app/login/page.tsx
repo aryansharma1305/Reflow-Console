@@ -5,8 +5,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { login, saveToken, saveUserInfo, getAllProjects, getProjectDevices } from "@/lib/api";
-import LogoLoader from "@/components/LogoLoader";
+import { login, saveToken, saveUserInfo } from "@/lib/api";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -14,7 +13,6 @@ export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
-    const [showLoader, setShowLoader] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -43,69 +41,8 @@ export default function LoginPage() {
                     const derivedName = email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
                     saveUserInfo(email.trim(), derivedName);
                 }
-                // Show branded loader for 4 seconds while data loads, then redirect
-                setLoading(false);
-                setShowLoader(true);
-
-                // ── Prefetch projects + devices in background during the loader ──
-                (async () => {
-                    try {
-                        const data = await getAllProjects();
-                        const projectList: any[] = Array.isArray(data)
-                            ? data
-                            : (data?.data?.projects || data?.projects || data?.data || []);
-
-                        const allDevices: any[] = [];
-                        const results = await Promise.allSettled(
-                            projectList.map(async (p: any) => {
-                                const pId = p.id || p._id || "";
-                                if (!pId) return { project: p, devices: [] };
-                                try {
-                                    const res = await getProjectDevices(pId);
-                                    const devs = res?.data?.devices || res?.devices || [];
-                                    p.devices = devs;
-                                    return { project: p, devices: devs };
-                                } catch {
-                                    return { project: p, devices: [] };
-                                }
-                            })
-                        );
-
-                        for (const result of results) {
-                            if (result.status === "fulfilled") {
-                                const { project, devices } = result.value as any;
-                                const pId = project.id || project._id || "";
-                                for (const raw of devices) {
-                                    const d = raw?.device || raw;
-                                    const serial =
-                                        d.serial_no || d.serialNumber || d.serialNo ||
-                                        d.serial_number || d.id || d._id || "";
-                                    allDevices.push({
-                                        id: d.id || d._id || serial,
-                                        _id: d._id || d.id,
-                                        name: d.name || serial || "Unnamed",
-                                        serial_no: serial,
-                                        serialNumber: serial,
-                                        description: d.description,
-                                        projectName: project.name,
-                                        projectId: pId,
-                                    });
-                                }
-                            }
-                        }
-
-                        sessionStorage.setItem(
-                            "reflow_prefetch",
-                            JSON.stringify({ projects: projectList, devices: allDevices, fetchedAt: Date.now() })
-                        );
-                    } catch {
-                        // Prefetch failed silently – context will fetch normally
-                    }
-                })();
-
-                setTimeout(() => {
-                    window.location.href = "/?setup=org";
-                }, 2000);
+                // Hard redirect to dashboard
+                window.location.href = "/?setup=org";
             } else {
                 const errorMsg =
                     result.message ||
@@ -120,11 +57,6 @@ export default function LoginPage() {
             setLoading(false);
         }
     };
-
-    // Show full-screen loader after successful login
-    if (showLoader) {
-        return <LogoLoader text="Setting up your workspace..." />;
-    }
 
 
     return (
