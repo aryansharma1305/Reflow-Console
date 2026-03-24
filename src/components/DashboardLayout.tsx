@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+import Image from "next/image";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import Footer from "./Footer";
@@ -47,7 +48,7 @@ function LayoutInner({
           >
             <Menu className="w-5 h-5" />
           </button>
-          <img src="/translogo.png" alt="ReFlow" className="h-7 w-auto object-contain" />
+          <Image src="/translogo.png" alt="ReFlow" width={120} height={28} className="object-contain" priority />
         </div>
         <Header title={title} subtitle={subtitle} breadcrumbs={breadcrumbs} />
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 bg-background relative z-0">

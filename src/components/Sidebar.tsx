@@ -73,15 +73,14 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
     <>
       {/* Logo */}
       <div className="h-14 flex items-center justify-center px-5 border-b border-border-subtle flex-shrink-0">
-        <div className="relative h-10 w-auto max-w-[160px] flex-shrink-0 transition-all duration-300" style={{ width: collapsed ? 32 : 160, height: collapsed ? 32 : 40 }}>
-          <Image
-            src="/translogo.png"
-            alt="ReFlow Logo"
-            fill
-            className="object-contain"
-            priority
-          />
-        </div>
+        <Image
+          src="/translogo.png"
+          alt="ReFlow Logo"
+          width={collapsed ? 32 : 160}
+          height={collapsed ? 32 : 40}
+          className="object-contain flex-shrink-0 transition-all duration-300"
+          priority
+        />
       </div>
 
       {/* Navigation */}
