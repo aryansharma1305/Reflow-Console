@@ -12,8 +12,7 @@ export const metadata: Metadata = {
   title: "ReFlow Console - Dashboard",
   description: "ReFlow Technologies - Industrial IoT Dashboard",
   icons: {
-    icon: "/Reflow drop logo.png",
-    apple: "/Reflow drop logo.png",
+    icon: "/icons/favicon.ico",
   },
 };
 
