@@ -64,6 +64,27 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
             return;
         }
 
+        // ── Use prefetched data from login loader if available ──────────────
+        if (typeof window !== "undefined") {
+            const raw = sessionStorage.getItem("reflow_prefetch");
+            if (raw) {
+                sessionStorage.removeItem("reflow_prefetch"); // consume once
+                try {
+                    const { projects, devices, fetchedAt } = JSON.parse(raw);
+                    // Only use if fetched within the last 2 minutes
+                    if (Date.now() - fetchedAt < 120_000 && Array.isArray(projects)) {
+                        setProjects(projects);
+                        setDevices(devices ?? []);
+                        setLastFetched(fetchedAt);
+                        setLoading(false);
+                        return; // skip network call – data already fresh
+                    }
+                } catch {
+                    // malformed cache – fall through to normal fetch
+                }
+            }
+        }
+
         setLoading(true);
         setError(null);
 

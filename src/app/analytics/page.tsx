@@ -384,15 +384,16 @@ export default function AnalyticsPage() {
 
     // Chart renderer
     const renderChart = () => {
-        // ── Y-axis domain: ±20% of actual data range, not forced to zero ──
+        // ── Y-axis domain: 20% of each bound's own value ──
+        // yMin = dataMin - dataMin*0.2   →  dataMin * 0.8
+        // yMax = dataMax + dataMax*0.2   →  dataMax * 1.2
         const allValues = processedChartData.flatMap(row =>
             activeKeys.map(k => row[k]).filter((v): v is number => typeof v === "number")
         );
         const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
         const dataMax = allValues.length > 0 ? Math.max(...allValues) : 10;
-        const padding = Math.abs(dataMax - dataMin) * 0.2 || Math.abs(dataMax) * 0.2 || 1;
-        const yMin = dataMin - padding;
-        const yMax = dataMax + padding;
+        const yMin = dataMin >= 0 ? dataMin * 0.8 : dataMin * 1.2;
+        const yMax = dataMax >= 0 ? dataMax * 1.2 : dataMax * 0.8;
 
         // ── X-axis: use numeric ts for proper time spacing, format for display ──
         const xMin = processedChartData.length > 0 ? processedChartData[0].ts as number : undefined;

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { login, saveToken, saveUserInfo } from "@/lib/api";
+import { login, saveToken, saveUserInfo, getAllProjects, getProjectDevices } from "@/lib/api";
 import LogoLoader from "@/components/LogoLoader";
 
 export default function LoginPage() {
@@ -46,9 +46,66 @@ export default function LoginPage() {
                 // Show branded loader for 4 seconds while data loads, then redirect
                 setLoading(false);
                 setShowLoader(true);
+
+                // ── Prefetch projects + devices in background during the loader ──
+                (async () => {
+                    try {
+                        const data = await getAllProjects();
+                        const projectList: any[] = Array.isArray(data)
+                            ? data
+                            : (data?.data?.projects || data?.projects || data?.data || []);
+
+                        const allDevices: any[] = [];
+                        const results = await Promise.allSettled(
+                            projectList.map(async (p: any) => {
+                                const pId = p.id || p._id || "";
+                                if (!pId) return { project: p, devices: [] };
+                                try {
+                                    const res = await getProjectDevices(pId);
+                                    const devs = res?.data?.devices || res?.devices || [];
+                                    p.devices = devs;
+                                    return { project: p, devices: devs };
+                                } catch {
+                                    return { project: p, devices: [] };
+                                }
+                            })
+                        );
+
+                        for (const result of results) {
+                            if (result.status === "fulfilled") {
+                                const { project, devices } = result.value as any;
+                                const pId = project.id || project._id || "";
+                                for (const raw of devices) {
+                                    const d = raw?.device || raw;
+                                    const serial =
+                                        d.serial_no || d.serialNumber || d.serialNo ||
+                                        d.serial_number || d.id || d._id || "";
+                                    allDevices.push({
+                                        id: d.id || d._id || serial,
+                                        _id: d._id || d.id,
+                                        name: d.name || serial || "Unnamed",
+                                        serial_no: serial,
+                                        serialNumber: serial,
+                                        description: d.description,
+                                        projectName: project.name,
+                                        projectId: pId,
+                                    });
+                                }
+                            }
+                        }
+
+                        sessionStorage.setItem(
+                            "reflow_prefetch",
+                            JSON.stringify({ projects: projectList, devices: allDevices, fetchedAt: Date.now() })
+                        );
+                    } catch {
+                        // Prefetch failed silently – context will fetch normally
+                    }
+                })();
+
                 setTimeout(() => {
                     window.location.href = "/?setup=org";
-                }, 4000);
+                }, 2000);
             } else {
                 const errorMsg =
                     result.message ||
