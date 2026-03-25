@@ -70,7 +70,7 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
           });
         }
       } catch (e) {
-        // failed to fetch profile, might be offline or no token
+
       } finally {
         setMounted(true);
       }
@@ -127,15 +127,13 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
                 <Link
                   href={item.path}
                   onClick={handleNavClick}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${
-                    active ? "bg-primary text-white font-medium" : "text-text-secondary hover:bg-surface-muted"
-                  } ${collapsed ? "justify-center px-2" : ""}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${active ? "bg-primary text-white font-medium" : "text-text-secondary hover:bg-surface-muted"
+                    } ${collapsed ? "justify-center px-2" : ""}`}
                   title={collapsed ? item.name : undefined}
                 >
                   <Icon
-                    className={`w-[18px] h-[18px] flex-shrink-0 ${
-                      active ? "text-white" : "text-text-muted group-hover:text-text-secondary"
-                    }`}
+                    className={`w-[18px] h-[18px] flex-shrink-0 ${active ? "text-white" : "text-text-muted group-hover:text-text-secondary"
+                      }`}
                   />
                   {!collapsed && <span className="text-[13px]">{item.name}</span>}
                 </Link>
@@ -150,18 +148,16 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
         <button
           onClick={() => { toggleBob(); handleNavClick(); }}
           title={collapsed ? "Bob AI" : undefined}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group border ${
-            isBobOpen
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group border ${isBobOpen
               ? "bg-primary border-primary text-white shadow-md"
               : "bg-surface text-text-primary border-border-default hover:border-primary/50 hover:shadow-sm"
-          } ${collapsed ? "justify-center px-2" : ""}`}
+            } ${collapsed ? "justify-center px-2" : ""}`}
         >
           <div className="relative flex-shrink-0">
             <Bot className={`w-[18px] h-[18px] ${isBobOpen ? "text-white" : "text-primary group-hover:text-primary-hover"}`} />
             <span
-              className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 ${
-                isBobOpen ? "border-primary bg-white" : "border-white bg-primary animate-pulse"
-              }`}
+              className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 ${isBobOpen ? "border-primary bg-white" : "border-white bg-primary animate-pulse"
+                }`}
             />
           </div>
           {!collapsed && (
@@ -216,9 +212,8 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
     <>
       {/* ── Desktop sidebar (hidden on mobile) ── */}
       <aside
-        className={`relative h-screen flex-col bg-white border-r border-border-subtle transition-all duration-300 hidden md:flex ${
-          isCollapsed ? "w-[72px]" : "w-[250px]"
-        }`}
+        className={`relative h-screen flex-col bg-white border-r border-border-subtle transition-all duration-300 hidden md:flex ${isCollapsed ? "w-[72px]" : "w-[250px]"
+          }`}
       >
         {sidebarContent(isCollapsed)}
         {/* Collapse Toggle */}

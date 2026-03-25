@@ -28,16 +28,17 @@ const PUBLIC_ROUTES = [
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
+
   // Get auth token from cookie or Authorization header
   const tokenFromCookie = request.cookies.get("auth_token")?.value;
   const tokenFromHeader = request.headers.get("authorization")?.replace("Bearer ", "");
   const token = tokenFromCookie || tokenFromHeader;
-  
+
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    pathname.startsWith(route)
-  );
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) => {
+    if (route === "/") return pathname === "/"; // exact match only
+    return pathname.startsWith(route);
+  });
 
   // Log for debugging
   console.log(`[Middleware] Path: ${pathname}, Token: ${token ? "✓" : "✗"}, Protected: ${isProtectedRoute}, Public: ${isPublicRoute}`);
@@ -60,7 +61,7 @@ export function middleware(request: NextRequest) {
       console.log(`[Middleware] No token found for route: ${pathname}, redirecting to login`);
       return NextResponse.redirect(new URL("/login", request.url));
     }
-    
+
     // Token exists, allow access (org setup can be handled by individual pages/components)
     console.log(`[Middleware] Token found for route: ${pathname}, allowing access`);
   }
