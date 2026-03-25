@@ -29,14 +29,26 @@ const PUBLIC_ROUTES = [
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // ✅ Skip middleware for static files and assets
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/icons") ||
+    pathname.startsWith("/assets") ||
+    /\.(.*)$/.test(pathname) // any file with an extension (.png, .jpg, .svg, .ico, etc.)
+  ) {
+    return NextResponse.next();
+  }
+
   // Get auth token from cookie or Authorization header
   const tokenFromCookie = request.cookies.get("auth_token")?.value;
   const tokenFromHeader = request.headers.get("authorization")?.replace("Bearer ", "");
   const token = tokenFromCookie || tokenFromHeader;
 
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+
+  // ✅ Fixed: exact match for "/" to prevent every path matching as protected
   const isProtectedRoute = PROTECTED_ROUTES.some((route) => {
-    if (route === "/") return pathname === "/"; // exact match only
+    if (route === "/") return pathname === "/";
     return pathname.startsWith(route);
   });
 
@@ -56,13 +68,10 @@ export function middleware(request: NextRequest) {
 
   // ── Protect authenticated routes ──
   if (isProtectedRoute) {
-    // No token = not authenticated, redirect to login
     if (!token) {
       console.log(`[Middleware] No token found for route: ${pathname}, redirecting to login`);
       return NextResponse.redirect(new URL("/login", request.url));
     }
-
-    // Token exists, allow access (org setup can be handled by individual pages/components)
     console.log(`[Middleware] Token found for route: ${pathname}, allowing access`);
   }
 
@@ -71,13 +80,9 @@ export function middleware(request: NextRequest) {
 
 /**
  * Configure which routes the middleware applies to
- * This prevents running middleware on static assets, api routes, etc.
  */
 export const config = {
   matcher: [
-    /*
-     * Match protected paths directly to avoid running on static assets
-     */
     "/",
     "/analytics/:path*",
     "/devices/:path*",
