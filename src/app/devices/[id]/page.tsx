@@ -586,10 +586,12 @@ export default function DeviceConfigPage() {
                         ) : (
                             channels.map((ch, i) => {
                                 const chKey = `CH${i + 1}`;
+                                // Use the name from calibration config (e.g. "RO Feed PH") if loaded
+                                const displayName = calibration[chKey]?.name || ch.name;
                                 return (
                                     <div key={i} className="grid grid-cols-[3fr_2fr_1.5fr] gap-x-4 items-center px-4 py-3 hover:bg-surface-muted/30 transition-colors">
                                         <div>
-                                            <p className="text-sm font-bold text-text-primary mb-0.5">{ch.name}</p>
+                                            <p className="text-sm font-bold text-text-primary mb-0.5">{displayName}</p>
                                             <div className="flex items-center gap-2">
                                                 <span className="inline-flex text-[10px] font-mono font-bold text-text-muted bg-surface-muted px-1.5 py-0.5 rounded">{ch.channel}</span>
                                             </div>

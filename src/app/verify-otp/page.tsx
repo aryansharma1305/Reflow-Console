@@ -339,7 +339,7 @@ function VerifyOTPContent() {
                             whileHover={{ scale: 1.05 }}
                         >
                             <Image
-                                src="/translogo.png"
+                                src="https://res.cloudinary.com/dvkqelyrt/image/upload/v1774383096/translogo_q2ulef.png"
                                 alt="ReFlow Logo"
                                 fill
                                 className="object-contain"

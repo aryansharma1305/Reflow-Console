@@ -189,6 +189,15 @@ export async function removeMember(memberId: string) {
     return handleResponse(res);
 }
 
+export async function updateMemberRole(memberId: string, role: string) {
+    const res = await apiFetch(`/organization/member/${memberId}/role`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify({ role }),
+    });
+    return handleResponse(res);
+}
+
 export async function leaveOrganization() {
     const res = await apiFetch("/organization/leave", {
         method: "POST",

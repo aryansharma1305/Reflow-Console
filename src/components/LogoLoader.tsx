@@ -57,7 +57,7 @@ export default function LogoLoader({ text = "Loading console..." }: LogoLoaderPr
           className="relative w-28 h-28 rounded-full bg-surface flex items-center justify-center"
         >
           <Image
-            src="/translogo.png"
+            src="https://res.cloudinary.com/dvkqelyrt/image/upload/v1774383096/translogo_q2ulef.png"
             alt="ReFlow Logo"
             fill
             className="object-contain"

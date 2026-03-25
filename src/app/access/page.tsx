@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import LogoLoader from "@/components/LogoLoader";
 import {
@@ -10,6 +11,7 @@ import {
     getOrganization,
     inviteToOrganization,
     removeMember as apiRemoveMember,
+    updateMemberRole,
     getOrganizationActivities,
     getAllProjects,
     shareProject,
@@ -74,14 +76,24 @@ function hashIdx(str: string): number {
 
 // ─── Toast component ─────────────────────────────────────────────────────────
 function Toast({ msg, ok, onClose }: { msg: string; ok: boolean; onClose: () => void }) {
-    useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
-    return (
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        const t = setTimeout(onClose, 3500);
+        return () => clearTimeout(t);
+    }, [onClose]);
+
+    if (!mounted) return null;
+
+    return createPortal(
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border ${ok ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+            className={`fixed top-20 right-4 md:right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border ${ok ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"}`}>
             {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-red-500" />}
             {msg}
             <button onClick={onClose}><X className="w-3.5 h-3.5 opacity-50 hover:opacity-100" /></button>
-        </motion.div>
+        </motion.div>,
+        document.body
     );
 }
 
@@ -106,6 +118,8 @@ export default function AccessPage() {
 
     // Remove confirm
     const [removingId, setRemovingId] = useState<string | null>(null);
+    // Role change
+    const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
 
     // Toast
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -158,7 +172,7 @@ export default function AccessPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [selectedProjectId]);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => { loadData(); }, []);
 
@@ -197,6 +211,20 @@ export default function AccessPage() {
             showToast("Failed to remove member", false);
         } finally {
             setRemovingId(null);
+        }
+    };
+
+    // Role change handler
+    const handleRoleChange = async (memberId: string, newRole: string) => {
+        setChangingRoleId(memberId);
+        try {
+            await updateMemberRole(memberId, newRole);
+            setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+            showToast(`✓ Role updated to ${newRole}`);
+        } catch (err: unknown) {
+            showToast(err instanceof Error ? err.message : "Failed to update role", false);
+        } finally {
+            setChangingRoleId(null);
         }
     };
 
@@ -368,9 +396,27 @@ export default function AccessPage() {
 
                                 <span className="text-sm text-slate-500 truncate">{member.email}</span>
 
-                                <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded text-[11px] font-bold w-fit ${ROLE_COLORS[member.role] || "bg-slate-100 text-slate-500"}`}>
-                                    {member.role}
-                                </span>
+                                {/* Role — editable dropdown for owners, static badge otherwise */}
+                                {isCurrentUserOwner && member.email !== email && member.role !== "OWNER" ? (
+                                    <div className="relative">
+                                        <select
+                                            value={member.role}
+                                            disabled={changingRoleId === member.id}
+                                            onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                                            className={`text-[11px] font-bold px-2.5 py-1 rounded border cursor-pointer appearance-none pr-6 ${ROLE_COLORS[member.role] || "bg-slate-100 text-slate-500"} border-transparent focus:outline-none focus:ring-1 focus:ring-blue-400`}
+                                        >
+                                            <option value="MEMBER">MEMBER</option>
+                                            <option value="ADMIN">ADMIN</option>
+                                        </select>
+                                        {changingRoleId === member.id && (
+                                            <RefreshCw className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin text-slate-400" />
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded text-[11px] font-bold w-fit ${ROLE_COLORS[member.role] || "bg-slate-100 text-slate-500"}`}>
+                                        {member.role}
+                                    </span>
+                                )}
 
                                 <span className="text-xs text-slate-400">
                                     {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}

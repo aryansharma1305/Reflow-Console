@@ -101,7 +101,7 @@ export default function Header({ title, subtitle, breadcrumbs }: HeaderProps) {
         try {
           const res = await api.getProfile();
           const profile = res?.data?.profile;
-          if (profile) {
+          if (!disposed && profile) {
             setUserName(profile.name);
             setUserRole("Member");
             return;
@@ -110,22 +110,25 @@ export default function Header({ title, subtitle, breadcrumbs }: HeaderProps) {
           // Fallback if network fails
         }
         
-        const isLoggedIn = api.isAuthenticated();
-        if (isLoggedIn) {
-          setUserName("User");
-          setUserRole("Member");
-        } else {
-          setUserName("User");
-          setUserRole("Guest");
+        if (!disposed) {
+          const isLoggedIn = api.isAuthenticated();
+          if (isLoggedIn) {
+            setUserName("User");
+            setUserRole("Member");
+          } else {
+            setUserName("User");
+            setUserRole("Guest");
+          }
         }
       };
 
+      // Fetch once on mount
       syncUser();
-      window.addEventListener("focus", syncUser);
+
+      // Only re-fetch when explicitly triggered (e.g. after profile update)
       window.addEventListener("reflow:user-info-changed", syncUser);
 
       cleanup = () => {
-        window.removeEventListener("focus", syncUser);
         window.removeEventListener("reflow:user-info-changed", syncUser);
       };
     });

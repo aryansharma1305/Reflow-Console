@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
     getUserEmail,
     getUserName,
-    getOrganization,
+    getProfile,
     isAuthenticated,
 } from "@/lib/api";
 import {
@@ -14,19 +14,73 @@ import {
     Bell,
     Palette,
     Shield,
-    Globe,
     Save,
     Moon,
     Sun,
     Monitor,
+    CheckCircle2,
+    AlertCircle,
 } from "lucide-react";
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("Profile");
     const [theme, setTheme] = useState("Light");
 
-    const email = getUserEmail();
-    const fullName = getUserName();
+    // Profile form state
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [email, setEmail] = useState("");
+    const [orgName, setOrgName] = useState("");
+    const [orgRole, setOrgRole] = useState("Member");
+    const [saving, setSaving] = useState(false);
+    const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+    // For sidebar/header
+    const fallbackName = getUserName();
+    const fallbackEmail = getUserEmail();
+
+    // Fetch real profile on mount
+    useEffect(() => {
+        async function load() {
+            if (!isAuthenticated()) return;
+            try {
+                const res = await getProfile();
+                const profile = res?.data?.profile;
+                if (profile) {
+                    const parts = (profile.name || "").split(" ");
+                    setFirstName(parts[0] || "");
+                    setLastName(parts.slice(1).join(" ") || "");
+                    setEmail(profile.email || "");
+                    setOrgName(profile.organization?.name || "");
+                    setOrgRole(profile.organization?.role || "Member");
+                }
+            } catch {
+                // fallback to JWT values
+                const parts = (fallbackName || "").split(" ");
+                setFirstName(parts[0] || "");
+                setLastName(parts.slice(1).join(" ") || "");
+                setEmail(fallbackEmail || "");
+            }
+        }
+        load();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const { default: api } = await import("@/lib/api") as any;
+            const fullName = [firstName, lastName].filter(Boolean).join(" ");
+            await api.updateProfile?.({ name: fullName }) ?? 
+                fetch("/api/profile", { method: "PUT", body: JSON.stringify({ name: fullName }) });
+            setToast({ msg: "✓ Profile updated successfully", ok: true });
+            window.dispatchEvent(new Event("reflow:user-info-changed"));
+        } catch {
+            setToast({ msg: "Failed to save changes", ok: false });
+        } finally {
+            setSaving(false);
+            setTimeout(() => setToast(null), 3500);
+        }
+    };
 
     const tabs = [
         { name: "Profile", icon: User },
@@ -35,6 +89,8 @@ export default function SettingsPage() {
         { name: "Security", icon: Shield },
     ];
 
+    const initials = [firstName[0], lastName[0]].filter(Boolean).join("").toUpperCase() || "U";
+
     return (
         <DashboardLayout
             title="Settings"
@@ -42,7 +98,7 @@ export default function SettingsPage() {
                 { label: "Workspace", href: "/" },
                 { label: "Settings" },
             ]}
-            user={{ name: fullName || "", email: email || "" }}
+            user={{ name: fallbackName || firstName || "", email: fallbackEmail || email || "" }}
         >
             <div className="space-y-6">
                 {/* Header */}
@@ -105,14 +161,14 @@ export default function SettingsPage() {
 
                                 <div className="flex items-center gap-4 pb-6 border-b border-border-subtle">
                                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-300 to-orange-400 flex items-center justify-center">
-                                        <span className="text-xl font-bold text-white">AM</span>
+                                        <span className="text-xl font-bold text-white">{initials}</span>
                                     </div>
                                     <div>
                                         <p className="text-base font-semibold text-text-primary">
-                                            {fullName || "User"}
+                                            {[firstName, lastName].filter(Boolean).join(" ") || "User"}
                                         </p>
                                         <p className="text-sm text-text-muted">
-                                            Engineering Lead
+                                            {orgRole}
                                         </p>
                                         <button className="mt-1 text-xs font-medium text-primary hover:text-primary-hover transition-colors">
                                             Change avatar
@@ -127,7 +183,9 @@ export default function SettingsPage() {
                                         </label>
                                         <input
                                             type="text"
-                                            defaultValue={fullName?.split(' ')[0] || ""}
+                                            value={firstName}
+                                            onChange={e => setFirstName(e.target.value)}
+                                            placeholder="First name"
                                             className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                                         />
                                     </div>
@@ -137,7 +195,9 @@ export default function SettingsPage() {
                                         </label>
                                         <input
                                             type="text"
-                                            defaultValue={fullName?.split(' ').slice(1).join(' ') || ""}
+                                            value={lastName}
+                                            onChange={e => setLastName(e.target.value)}
+                                            placeholder="Last name"
                                             className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                                         />
                                     </div>
@@ -147,8 +207,9 @@ export default function SettingsPage() {
                                         </label>
                                         <input
                                             type="email"
-                                            defaultValue={email || ""}
-                                            className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                                            value={email}
+                                            readOnly
+                                            className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-surface-muted text-sm text-text-primary cursor-not-allowed"
                                         />
                                     </div>
                                     <div>
@@ -168,16 +229,30 @@ export default function SettingsPage() {
                                         </label>
                                         <input
                                             type="text"
-                                            defaultValue="ReFlow Technologies"
+                                            value={orgName}
+                                            onChange={e => setOrgName(e.target.value)}
+                                            placeholder="Organization name"
                                             className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                                         />
                                     </div>
                                 </div>
 
+                                {/* Toast */}
+                                {toast && (
+                                    <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${toast.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                                        {toast.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                                        {toast.msg}
+                                    </div>
+                                )}
+
                                 <div className="flex justify-end pt-4 border-t border-border-subtle">
-                                    <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors">
-                                        <Save className="w-4 h-4" />
-                                        Save Changes
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={saving}
+                                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-60"
+                                    >
+                                        {saving ? <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : <Save className="w-4 h-4" />}
+                                        {saving ? "Saving…" : "Save Changes"}
                                     </button>
                                 </div>
                             </div>

@@ -59,32 +59,36 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    let cancelled = false;
+
     const syncUser = async () => {
       try {
         const res = await getProfile();
         const profile = res?.data?.profile;
-        if (profile) {
+        if (!cancelled && profile) {
           setClientUser({
-            name: user?.name || profile.name || "",
-            email: user?.email || profile.email || "",
+            name: profile.name || "",
+            email: profile.email || "",
           });
         }
       } catch (e) {
-
+        // failed to fetch profile
       } finally {
-        setMounted(true);
+        if (!cancelled) setMounted(true);
       }
     };
 
+    // Fetch once on mount
     syncUser();
-    window.addEventListener("focus", syncUser);
+
+    // Only re-fetch when explicitly triggered (e.g. after profile update)
     window.addEventListener("reflow:user-info-changed", syncUser);
 
     return () => {
-      window.removeEventListener("focus", syncUser);
+      cancelled = true;
       window.removeEventListener("reflow:user-info-changed", syncUser);
     };
-  }, [user]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = (): void => {
     clearAuth();
@@ -106,7 +110,7 @@ export default function Sidebar({ user, mobileOpen = false, onMobileClose }: Sid
       {/* Logo */}
       <div className="h-14 flex items-center justify-center px-5 border-b border-border-subtle flex-shrink-0">
         <Image
-          src="/translogo.png"
+          src="https://res.cloudinary.com/dvkqelyrt/image/upload/v1774383096/translogo_q2ulef.png"
           alt="ReFlow Logo"
           width={collapsed ? 32 : 160}
           height={collapsed ? 32 : 40}
