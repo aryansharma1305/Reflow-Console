@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getOrganization, createOrganization, saveOrgConfirmed, saveOrgSetupSkipped } from "@/lib/api";
-import { Building2, ArrowRight, Loader2, CheckCircle2, X } from "lucide-react";
+import { Building2, ArrowRight, Loader2, CheckCircle2, X, RefreshCw } from "lucide-react";
 
 interface OrganizationSetupProps {
     onComplete: () => void;
@@ -12,6 +12,7 @@ interface OrganizationSetupProps {
 export default function OrganizationSetup({ onComplete }: OrganizationSetupProps) {
     const [checking, setChecking] = useState(true);
     const [hasOrg, setHasOrg] = useState(false);
+    const [view, setView] = useState<"options" | "create">("options");
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [loading, setLoading] = useState(false);
@@ -51,6 +52,27 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
         onComplete();
     };
 
+    const handleCheckInvite = async () => {
+        setLoading(true);
+        try {
+            const data = await getOrganization();
+            if (data.ok === true) {
+                saveOrgConfirmed();
+                setHasOrg(true);
+                setSuccess(true);
+                setTimeout(() => {
+                    onComplete();
+                }, 1400);
+            } else {
+                setError("No invitation found yet. If an admin invited you, please ask them to resend or check your email.");
+            }
+        } catch {
+            setError("No invitation found yet or failed to connect.");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) {
@@ -61,7 +83,7 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
         setLoading(true);
         try {
             const data = await createOrganization(name.trim(), description.trim());
-            if (data?.data?.id || data?.data?._id || data?.success || data?.name) {
+            if (data?.status === "success" || data?.data) {
                 saveOrgConfirmed();
                 setSuccess(true);
                 setTimeout(() => {
@@ -69,10 +91,10 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
                 }, 1400);
             } else {
                 setError(data?.message || data?.error || "Failed to create organization. Please try again.");
+                setLoading(false);
             }
         } catch (err: any) {
             setError(err.message || "An unexpected error occurred. Please try again.");
-        } finally {
             setLoading(false);
         }
     };
@@ -107,14 +129,16 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
                     <div className="h-2 w-full bg-gradient-to-r from-blue-500 via-blue-600 to-blue-700" />
 
                     <div className="p-8 sm:p-10">
-                        {/* Skip button */}
-                        <button
-                            onClick={handleSkip}
-                            className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition-colors p-1"
-                            aria-label="Skip"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
+                        {/* Skip button, only show in options view */}
+                        {view === "options" && (
+                            <button
+                                onClick={handleSkip}
+                                className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 transition-colors p-1"
+                                aria-label="Skip"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        )}
 
                         {/* Icon */}
                         <motion.div
@@ -126,19 +150,77 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
                             <Building2 className="w-7 h-7 text-blue-600" />
                         </motion.div>
 
-                        {/* Title */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.25 }}
-                        >
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1">
-                                Set up your Organisation
-                            </h2>
-                            <p className="text-sm text-gray-500 mb-8">
-                                Create an organisation to manage projects, devices, and team members under a single workspace.
-                            </p>
-                        </motion.div>
+                        {/* Optional View Selection */}
+                        {view === "options" && !success && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.25 }}
+                            >
+                                <h2 className="text-2xl font-bold text-gray-900 mb-1">
+                                    Welcome to ReFlow!
+                                </h2>
+                                <p className="text-sm text-gray-500 mb-6">
+                                    You are not currently part of an organisation. Projects and devices are managed within organisations.
+                                </p>
+
+                                {error && (
+                                    <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    <button
+                                        onClick={() => { setError(null); setView("create"); }}
+                                        className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left group"
+                                    >
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 group-hover:text-blue-700">Create an Organisation</h3>
+                                            <p className="text-xs text-gray-500 mt-1">Start a new workspace for your team.</p>
+                                        </div>
+                                        <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-500" />
+                                    </button>
+
+                                    <button
+                                        onClick={handleCheckInvite}
+                                        disabled={loading}
+                                        className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left group"
+                                    >
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 group-hover:text-blue-700">Wait for Invitation</h3>
+                                            <p className="text-xs text-gray-500 mt-1">Ask your administrator to invite you.</p>
+                                        </div>
+                                        {loading ? (
+                                            <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="w-5 h-5 text-gray-400 group-hover:text-blue-500" />
+                                        )}
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* Title and Form for Create */}
+                        {view === "create" && !success && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                            >
+                                <button
+                                    onClick={() => { setError(null); setView("options"); }}
+                                    className="mb-4 text-sm font-medium text-gray-500 hover:text-gray-900 flex items-center gap-1"
+                                >
+                                    <ArrowRight className="w-4 h-4 rotate-180" /> Back
+                                </button>
+                                <h2 className="text-2xl font-bold text-gray-900 mb-1">
+                                    Create Organisation
+                                </h2>
+                                <p className="text-sm text-gray-500 mb-8">
+                                    Create a workspace to manage projects and devices.
+                                </p>
+                            </motion.div>
+                        )}
 
                         {/* Success state */}
                         {success ? (
@@ -150,16 +232,15 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
                                 <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
                                     <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                                 </div>
-                                <p className="text-lg font-semibold text-gray-800">Organisation Created!</p>
+                                <p className="text-lg font-semibold text-gray-800">Ready to go!</p>
                                 <p className="text-sm text-gray-500">Taking you to your dashboard…</p>
                             </motion.div>
-                        ) : (
+                        ) : view === "create" ? (
                             <motion.form
                                 onSubmit={handleSubmit}
                                 className="space-y-5"
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.3 }}
                             >
                                 {error && (
                                     <motion.div
@@ -217,20 +298,9 @@ export default function OrganizationSetup({ onComplete }: OrganizationSetupProps
                                             </>
                                         )}
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleSkip}
-                                        className="px-4 py-3 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-all"
-                                    >
-                                        Skip
-                                    </button>
                                 </div>
-
-                                <p className="text-center text-xs text-gray-400 mt-2">
-                                    You can always create or join an organisation later from Settings.
-                                </p>
                             </motion.form>
-                        )}
+                        ) : null}
                     </div>
                 </motion.div>
             </motion.div>

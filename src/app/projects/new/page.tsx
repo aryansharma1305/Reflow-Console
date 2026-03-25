@@ -54,23 +54,22 @@ export default function NewProjectPage() {
         try {
             const result = await createProject(name.trim(), description.trim());
 
-            if (result?.error || result?.message?.toLowerCase().includes("no organization") ||
-                result?.message?.toLowerCase().includes("not found")) {
-                setError(result.error || result.message || "Failed to create project");
-            } else if (result?.error || result?.message) {
-                setError(result.error || result.message || "Failed to create project");
-            } else {
-                const projectId = result?.data?.project?.id || result?.id;
+            if (result?.status === "success" || result?.data) {
+                // Success - redirect to project
+                const projectId = result?.data?.project?.id || result?.id || result?.data?.project?._id;
                 if (projectId) {
                     router.push(`/projects/${projectId}`);
                 } else {
                     router.push("/projects");
                 }
+                // Do NOT set loading to false here, so the button stays disabled during routing
+            } else {
+                setError(result?.error || result?.message || "Failed to create project");
+                setLoading(false);
             }
         } catch (err: any) {
             console.error("Error creating project:", err);
             setError(err.message || "Failed to create project. Please try again.");
-        } finally {
             setLoading(false);
         }
     }

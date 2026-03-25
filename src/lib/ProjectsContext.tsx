@@ -31,6 +31,7 @@ interface Project {
     status?: string;
     createdBy?: { name?: string; email?: string };
     members?: { user?: { email?: string; name?: string }; role?: string }[];
+    accessLevel?: string;
     updatedAt?: string;
 }
 

@@ -27,10 +27,10 @@ export default function ProjectsPage() {
   const { ownProjects, sharedProjects } = useMemo(() => {
     const userEmail = getUserEmail();
     const owned = projects.filter(
-      (p) => p.createdBy?.email === userEmail
+      (p) => p.accessLevel === "owner" || p.createdBy?.email === userEmail
     );
     const shared = projects.filter(
-      (p) => p.createdBy?.email !== userEmail
+      (p) => p.accessLevel !== "owner" && p.createdBy?.email !== userEmail
     );
     return {
       ownProjects: owned.length > 0 ? owned : projects,

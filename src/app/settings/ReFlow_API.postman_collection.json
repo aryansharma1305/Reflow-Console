@@ -1,0 +1,983 @@
+{
+  "info": {
+    "_postman_id": "reflow-backend-api-v1",
+    "name": "ReFlow Backend API",
+    "description": "Complete API documentation for the ReFlow IoT Backend.\n\n**Base URL:** `{{baseUrl}}`\n\n**Authentication:** Most endpoints require a Bearer JWT token in the `Authorization` header. Obtain a token via the Login or Verify OTP endpoints.\n\n**Response Format:** All responses follow `{ message, status, data? }`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "memberId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "System health and status checks.",
+      "item": [
+        {
+          "name": "Root - Welcome",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Returns API welcome message, version, and timestamp. No authentication required."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Welcome to Reflow Technologies API\",\n  \"status\": \"success\",\n  \"version\": \"1.0.0\",\n  \"iss\": \"Reflow Technologies\",\n  \"timestamp\": \"2026-03-25T00:00:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Checks API and database health status. No authentication required."
+          },
+          "response": [
+            {
+              "name": "Healthy",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Health check successful\",\n  \"database\": { \"status\": \"ok\", \"message\": \"Database connection is healthy\" },\n  \"version\": \"1.0.0\",\n  \"iss\": \"Reflow Technologies\",\n  \"timestamp\": \"2026-03-25T00:00:00.000Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "User authentication endpoints — signup, login, OTP generation, and verification. No authentication required.",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"name\": \"John Doe\",\n  \"password\": \"securePassword123\",\n  \"contactNumber\": \"+919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/user/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "user", "signup"]
+            },
+            "description": "Register a new user. A 6-digit verification code is emailed (expires in 15 minutes).\n\n**Required fields:** `email`, `name`, `password`, `contactNumber`\n\n**Validations:**\n- Valid personal email format\n- Valid contact number format\n- Email must not already be registered"
+          },
+          "response": [
+            {
+              "name": "Success (201)",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"message\": \"User registered successfully. Verification email sent.\",\n  \"status\": \"success\"\n}"
+            },
+            {
+              "name": "User Exists (409)",
+              "status": "Conflict",
+              "code": 409,
+              "body": "{\n  \"message\": \"User already exists\",\n  \"status\": \"error\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"securePassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/user/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "user", "login"]
+            },
+            "description": "Login with email and password. Returns a JWT token.\n\n**Required fields:** `email`, `password`\n\n**Pre-conditions:** User must be verified."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"User logged in successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiIs...\"\n  }\n}"
+            },
+            {
+              "name": "Not Verified (403)",
+              "status": "Forbidden",
+              "code": 403,
+              "body": "{\n  \"message\": \"User not verified\",\n  \"status\": \"error\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Generate OTP",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"action\": \"login\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/user/generate/otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "user", "generate", "otp"]
+            },
+            "description": "Generate and send a 6-digit OTP to the user's email (expires in 10 minutes).\n\n**Required fields:** `email`, `action`\n\n**`action` values:**\n- `\"login\"` — OTP for login (user must be verified)\n- `\"signup\"` — OTP for account verification"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"OTP sent successfully to your email\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"verificationCode\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/user/verify/otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "user", "verify", "otp"]
+            },
+            "description": "Verify an OTP code. On success, marks the user as verified and returns a JWT token.\n\n**Required fields:** `email`, `verificationCode`"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"User verified successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiIs...\"\n  }\n}"
+            },
+            {
+              "name": "Expired (400)",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"message\": \"Verification code has expired.\",\n  \"status\": \"error\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "description": "User profile management. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "profile"]
+            },
+            "description": "Retrieve the authenticated user's profile including organization info and role."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Profile retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"profile\": {\n      \"email\": \"user@example.com\",\n      \"name\": \"John Doe\",\n      \"contactNumber\": \"+919876543210\",\n      \"verified\": true,\n      \"organization\": {\n        \"id\": \"org_id\",\n        \"name\": \"My Org\",\n        \"role\": \"OWNER\"\n      }\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Updated\",\n  \"contactNumber\": \"+919876543211\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "profile"]
+            },
+            "description": "Update the authenticated user's profile.\n\n**Optional fields (at least one required):** `name`, `contactNumber`"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Profile updated successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"user_id\",\n      \"email\": \"user@example.com\",\n      \"name\": \"John Updated\",\n      \"contactNumber\": \"+919876543211\",\n      \"verified\": true\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Organization",
+      "description": "Organization management — CRUD, membership, roles, ownership transfer, and activity log. All routes require authentication.",
+      "item": [
+        {
+          "name": "Create Organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Organization\",\n  \"description\": \"IoT monitoring company\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization"]
+            },
+            "description": "Create a new organization. The authenticated user becomes the OWNER.\n\n**Required:** `name`\n**Optional:** `description`\n\n**Constraints:** User must not already own or be a member of an organization."
+          },
+          "response": [
+            {
+              "name": "Success (201)",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"message\": \"Organization created successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"organization\": {\n      \"id\": \"org_id\",\n      \"name\": \"My Organization\",\n      \"description\": \"IoT monitoring company\",\n      \"ownerId\": \"user_id\",\n      \"owner\": { \"name\": \"John\", \"email\": \"john@example.com\" }\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Organization",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization"]
+            },
+            "description": "Get the authenticated user's organization with members and projects."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Organization retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"organization\": {\n      \"id\": \"org_id\",\n      \"name\": \"My Organization\",\n      \"members\": [],\n      \"projects\": []\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Invite User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"role\": \"MEMBER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/invite",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "invite"]
+            },
+            "description": "Invite a user to the organization. \n\n**If user is registered:** Adds them directly and sends a notification email.\n**If user is NOT registered:** Sends an invitation email with a Register button.\n\n**Required:** `email`\n**Optional:** `role` (default: `MEMBER`)\n\n**Role values:** `ADMIN`, `MEMBER` (cannot assign `OWNER`)\n\n**Permissions:**\n- OWNER can assign ADMIN or MEMBER\n- ADMIN can only assign MEMBER"
+          },
+          "response": [
+            {
+              "name": "Registered User Invited (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"User invited successfully\",\n  \"status\": \"success\"\n}"
+            },
+            {
+              "name": "Unregistered User - Email Sent (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"User is not registered. Invitation email sent to register.\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Remove Member",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/member/{{memberId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "member", "{{memberId}}"]
+            },
+            "description": "Remove a member from the organization.\n\n**Path param:** `memberId` — the user ID to remove\n\n**Permissions:**\n- OWNER can remove anyone except themselves\n- ADMIN can only remove MEMBERs\n- Cannot remove the OWNER"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"User removed successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Member Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/member/{{memberId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "member", "{{memberId}}", "role"]
+            },
+            "description": "Change a member's role within the organization.\n\n**Path param:** `memberId`\n**Required:** `role` (`ADMIN` or `MEMBER`)\n\n**Permissions:** Only the OWNER can change roles. Use transfer-ownership for OWNER role."
+          },
+          "response": [
+            {
+              "name": "Promoted (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"User promoted to ADMIN successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "members"]
+            },
+            "description": "Get all members of the organization with their roles.\n\n**Permissions:** Only the OWNER can view the full members list."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Organization members retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"members\": [\n      {\n        \"id\": \"user_id\",\n        \"name\": \"John\",\n        \"email\": \"john@example.com\",\n        \"role\": \"OWNER\",\n        \"joinedAt\": \"2026-01-01T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Leave Organization",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/leave",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "leave"]
+            },
+            "description": "Leave the organization. OWNERs must transfer ownership first."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Left organization successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Transfer Ownership",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newOwnerId\": \"target_user_id\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/transfer-ownership",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "transfer-ownership"]
+            },
+            "description": "Transfer organization ownership to another member. The current OWNER is demoted to ADMIN.\n\n**Required:** `newOwnerId` — must be an existing organization member.\n\n**Permissions:** Only the current OWNER can transfer ownership."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Ownership transferred successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organization/activities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "organization", "activities"]
+            },
+            "description": "Get the last 50 activity log entries for the organization."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Organization activities retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"activities\": [\n      {\n        \"id\": \"act_id\",\n        \"action\": \"USER_INVITED\",\n        \"userId\": \"user_id\",\n        \"description\": \"John invited Jane to join the organization\",\n        \"createdAt\": \"2026-03-25T00:00:00.000Z\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "description": "Project management — create, list, share, and delete projects. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "projects"]
+            },
+            "description": "List all projects the user has access to.\n\n**Access levels:**\n- OWNER / ADMIN: See all organization projects\n- MEMBER: See only own projects + shared projects\n\nEach project includes an `accessLevel` field."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Projects retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"projects\": [\n      {\n        \"id\": \"proj_id\",\n        \"name\": \"My Project\",\n        \"description\": \"...\",\n        \"accessLevel\": \"owner\",\n        \"createdBy\": { \"id\": \"...\", \"name\": \"...\", \"email\": \"...\" },\n        \"organization\": { \"id\": \"...\", \"name\": \"...\" }\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Project\",\n  \"description\": \"Project description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "project"]
+            },
+            "description": "Create a new project within the user's organization.\n\n**Required:** `name`\n**Optional:** `description`\n\nNon-owner creators automatically get EDITOR access via ProjectShare."
+          },
+          "response": [
+            {
+              "name": "Success (201)",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"message\": \"Project created successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"project\": {\n      \"id\": \"proj_id\",\n      \"name\": \"New Project\",\n      \"description\": \"Project description\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "project", "{{projectId}}"]
+            },
+            "description": "Delete a project and all related data (cascading).\n\n**Path param:** `projectId`\n\n**Permissions:** OWNER, ADMIN, or the project creator."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Project deleted successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Share Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"member@example.com\",\n  \"role\": \"VIEWER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project/{{projectId}}/share",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "project", "{{projectId}}", "share"]
+            },
+            "description": "Share a project with another organization member.\n\n**Path param:** `projectId`\n**Required:** `userEmail`\n**Optional:** `role` (default: `VIEWER`). Values: `VIEWER`, `EDITOR`\n\n**Permissions:** OWNER, ADMIN, or the project creator.\n**Constraint:** Target user must be in the same organization."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Project shared successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "description": "Device management — CRUD, move between projects, data export, and MQTT config. All routes require authentication.",
+      "item": [
+        {
+          "name": "Get Project Devices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project/{{projectId}}/devices",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "project", "{{projectId}}", "devices"]
+            },
+            "description": "List all devices in a project.\n\n**Path param:** `projectId`\n\nResponse includes `accessLevel` and `canEdit` flags."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Devices retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"devices\": [],\n    \"accessLevel\": \"owner\",\n    \"canEdit\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serialNumber\": \"DEVICE_SERIAL_001\",\n  \"subscriptionKey\": \"device-subscription-key\",\n  \"name\": \"Temperature Sensor\",\n  \"description\": \"Main floor sensor\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/project/{{projectId}}/device",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "project", "{{projectId}}", "device"]
+            },
+            "description": "Register a new device to a project.\n\n**Path param:** `projectId`\n**Required:** `serialNumber`, `subscriptionKey`, `name`\n**Optional:** `description`\n\nThe `subscriptionKey` is validated against the device registration database.\n\n**Permissions:** Editor access or above."
+          },
+          "response": [
+            {
+              "name": "Success (201)",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"message\": \"Device created successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"device\": {\n      \"id\": \"DEVICE_SERIAL_001\",\n      \"name\": \"Temperature Sensor\",\n      \"description\": \"Main floor sensor\",\n      \"projectId\": \"proj_id\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Device",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}"]
+            },
+            "description": "Get details of a specific device.\n\n**Path param:** `deviceId`"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"device\": { \"id\": \"...\", \"name\": \"...\", \"project\": {} },\n    \"accessLevel\": \"owner\",\n    \"canEdit\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Device",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Sensor Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}"]
+            },
+            "description": "Update a device's name and/or description.\n\n**Path param:** `deviceId`\n**Optional:** `name`, `description`\n\n**Permissions:** Editor access or above."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device updated successfully\",\n  \"status\": \"success\",\n  \"data\": { \"device\": {} }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Device",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}"]
+            },
+            "description": "Delete a device.\n\n**Path param:** `deviceId`\n\n**Permissions:** Editor access or above."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device deleted successfully\",\n  \"status\": \"success\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Move Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newProjectId\": \"target_project_id\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}", "move"]
+            },
+            "description": "Move a device from one project to another within the same organization.\n\n**Path param:** `deviceId`\n**Required:** `newProjectId`\n\n**Permissions:** Editor access on BOTH source and destination projects."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device moved successfully\",\n  \"status\": \"success\",\n  \"data\": { \"device\": {} }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Export Device Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startDate\": \"2026-03-01\",\n  \"endDate\": \"2026-03-25\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}", "export"]
+            },
+            "description": "Export device sensor reading data for a date range.\n\n**Path param:** `deviceId`\n**Required:** `startDate`, `endDate`"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device data exported successfully\",\n  \"status\": \"success\",\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get MQTT Device Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}/mqtt/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}", "mqtt", "config"]
+            },
+            "description": "Retrieve the current MQTT configuration data for a device.\n\n**Path param:** `deviceId`"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device config data retrieved successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"device\": \"device_id\",\n    \"config\": {}\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Publish MQTT Device Config",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"sampleRate\": 5,\n    \"threshold\": 75.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/device/{{deviceId}}/mqtt/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "device", "{{deviceId}}", "mqtt", "config"]
+            },
+            "description": "Publish updated configuration data to a device via MQTT.\n\n**Path param:** `deviceId`\n**Required:** `config` — a non-empty JSON object\n\n**Validation:** Only keys that exist in the current config with matching types are accepted. Mismatched keys are discarded and reported in `discardedKeys`.\n\n**Permissions:** Editor access or above."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"message\": \"Device config data published successfully\",\n  \"status\": \"success\",\n  \"data\": {\n    \"device\": \"device_id\",\n    \"config\": {},\n    \"discardedKeys\": []\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Chat (Bot AI)",
+      "description": "AI-powered device monitoring chatbot. Uses LLM for query analysis and response generation.",
+      "item": [
+        {
+          "name": "Create Chat Session",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"DEVICE_SERIAL_001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/create/chat/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "create", "chat", "session"]
+            },
+            "description": "Create a new chat session for a device. Fetches device data from MQTT and stores it in the session.\n\n**Required:** `device_id`\n\nReturns a `session_id` to use in subsequent chat requests."
+          },
+          "response": [
+            {
+              "name": "Success (201)",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Session created successfully\",\n  \"data\": {\n    \"session_id\": \"mongo_session_id\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Generate Chat Response",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_query\": \"What was the temperature reading yesterday?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/generate/chat/{{sessionId}}/response",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "generate", "chat", "{{sessionId}}", "response"]
+            },
+            "description": "Send a message to the AI chatbot and get a response.\n\n**Path param:** `session_id`\n**Required:** `user_query`\n\n**Features:**\n- Guard rails: Rejects non-device-related queries\n- Date extraction: Parses natural language dates\n- Context-aware: Uses chat history for follow-up questions\n- Auto-fetches device data for relevant date ranges"
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Chat response generated successfully\",\n  \"data\": {\n    \"response\": \"The temperature reading yesterday was...\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cleanup Old Sessions",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cleanup/chat/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "cleanup", "chat", "sessions"]
+            },
+            "description": "Delete all chat sessions that haven't been updated in the last 6 hours. Used for periodic cleanup."
+          },
+          "response": [
+            {
+              "name": "Success (200)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Cleared 5 sessions last updated >= 6 hours ago.\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bot",
+      "description": "Bot widget script serving.",
+      "item": [
+        {
+          "name": "Get Bot Script",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bot",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bot"]
+            },
+            "description": "Serves the bot.js widget script file. Returns `application/javascript` content type with CORS headers."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contact",
+      "description": "Public contact form submission.",
+      "item": [
+        {
+          "name": "Submit Contact Form",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"message\": \"I'd like to know more about ReFlow.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/contact",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "contact"]
+            },
+            "description": "Submit a contact us form. No authentication required.\n\n**Required:** `name`, `email`, `message`\n\n**Validation:** Valid personal email format."
+          },
+          "response": [
+            {
+              "name": "Success (201)",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Contact us data created successfully\",\n  \"data\": {\n    \"id\": \"contact_id\",\n    \"name\": \"Jane Doe\",\n    \"email\": \"jane@example.com\",\n    \"message\": \"I'd like to know more about ReFlow.\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

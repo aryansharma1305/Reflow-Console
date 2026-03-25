@@ -66,7 +66,7 @@ function ProjectDetailContent({ projectId }: { projectId: string }) {
     }, [projects, projectId]);
 
     const projectName = project?.name || "Project";
-    const isOwner = project?.createdBy?.email === email;
+    const isOwner = project?.accessLevel === "owner" || project?.createdBy?.email === email;
 
     // Get devices for this project from cache
     const devices = useMemo(() => {
