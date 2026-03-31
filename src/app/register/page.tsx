@@ -1,10 +1,24 @@
 "use client";
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signup, signupInvitedUser } from "@/lib/api";
 
 export default function RegisterPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50/50">
+                    <div className="text-blue-600 font-semibold text-lg animate-pulse">Loading...</div>
+                </div>
+            }
+        >
+            <RegisterContent />
+        </Suspense>
+    );
+}
+
+function RegisterContent() {
     const searchParams = useSearchParams();
     const inviteCode = searchParams.get("inviteCode")?.trim() || "";
     const isInviteFlow = Boolean(inviteCode);
