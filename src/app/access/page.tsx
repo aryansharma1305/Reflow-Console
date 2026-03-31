@@ -9,6 +9,7 @@ import {
     getUserEmail,
     getUserName,
     getOrganization,
+    getOrganizationMembers,
     inviteToOrganization,
     removeMember as apiRemoveMember,
     updateMemberRole,
@@ -80,9 +81,16 @@ function hashIdx(str: string): number {
 }
 
 function normalizeMemberProjects(value: unknown): { id?: string; name: string }[] {
-    if (!Array.isArray(value)) return [];
+    const flat: unknown[] = Array.isArray(value)
+        ? value
+        : value && typeof value === "object"
+            ? [
+                ...(((value as Record<string, unknown>).canEdit as unknown[]) || []),
+                ...(((value as Record<string, unknown>).canView as unknown[]) || []),
+            ]
+            : [];
 
-    return value
+    const parsed = flat
         .map((entry) => {
             if (typeof entry === "string") return { name: entry };
             if (!entry || typeof entry !== "object") return null;
@@ -108,6 +116,15 @@ function normalizeMemberProjects(value: unknown): { id?: string; name: string }[
             };
         })
         .filter((project): project is { id?: string; name: string } => Boolean(project));
+
+    // Deduplicate by id/name to avoid duplicates across canEdit + canView lists.
+    const seen = new Set<string>();
+    return parsed.filter((project) => {
+        const key = (project.id || project.name).toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
 // ─── Toast component ─────────────────────────────────────────────────────────
@@ -167,29 +184,38 @@ export default function AccessPage() {
         if (!isAuthenticated()) { setLoading(false); return; }
         if (silent) setRefreshing(true); else setLoading(true);
         try {
-            const [orgData, actData, projData] = await Promise.all([
+            const [orgResult, membersResult, actResult, projResult] = await Promise.allSettled([
                 getOrganization(),
+                getOrganizationMembers(),
                 getOrganizationActivities(),
                 getAllProjects(),
             ]);
+            const orgData = orgResult.status === "fulfilled" ? orgResult.value : null;
+            const membersData = membersResult.status === "fulfilled" ? membersResult.value : null;
+            const actData = actResult.status === "fulfilled" ? actResult.value : null;
+            const projData = projResult.status === "fulfilled" ? projResult.value : null;
 
             // Org + members
             const org = orgData?.data || orgData;
             setOrgName(org?.name || org?.organization?.name || "Your Organisation");
             const rawMembers =
-                org?.members || org?.organization?.members ||
-                orgData?.members || [];
+                membersData?.data?.members ||
+                membersData?.members ||
+                org?.members ||
+                org?.organization?.members ||
+                orgData?.members ||
+                [];
             setMembers(
                 rawMembers.map((m: {
                     _id?: string; id?: string; name?: string;
                     email?: string; user?: { name?: string; email?: string };
-                    role?: string; joinedAt?: string; createdAt?: string;
+                    role?: string; organizationRole?: string; joinedAt?: string; createdAt?: string;
                     projects?: unknown; memberProjects?: unknown; projectAccess?: unknown; accessibleProjects?: unknown;
                 }) => ({
                     id: m._id || m.id || m.user?.email || m.email || String(Math.random()),
                     name: m.name || m.user?.name,
                     email: m.email || m.user?.email || "",
-                    role: (m.role || "MEMBER").toUpperCase(),
+                    role: (m.organizationRole || m.role || "MEMBER").toUpperCase(),
                     joinedAt: m.joinedAt || m.createdAt,
                     projects: normalizeMemberProjects(
                         m.projects || m.memberProjects || m.projectAccess || m.accessibleProjects || []
@@ -202,7 +228,7 @@ export default function AccessPage() {
             setActivities(Array.isArray(acts) ? acts.slice(0, 10) : []);
 
             // Projects
-            const normalizedProjects = normalizeProjectsResponse(projData);
+            const normalizedProjects = normalizeProjectsResponse(projData || {});
             const allProjects = normalizedProjects.projects as Project[];
             const shareableProjects = allProjects.filter((project) => isOwnerProject(project, email || ""));
             const inviteProjects = shareableProjects.length > 0 ? shareableProjects : allProjects;

@@ -270,6 +270,13 @@ export async function getOrganization() {
     }
 }
 
+export async function getOrganizationMembers() {
+    const res = await apiFetch("/organization/members", {
+        headers: getHeaders(),
+    }, { noStore: true });
+    return handleResponse(res);
+}
+
 export async function createOrganization(name: string, description: string) {
     const res = await apiFetch("/organization", {
         method: "POST",
