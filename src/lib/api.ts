@@ -185,6 +185,24 @@ export async function signup(email: string, name: string, password: string, cont
     return handleResponse(res);
 }
 
+export async function signupInvitedUser(name: string, inviteCode: string, contactNumber?: string) {
+    const payload: Record<string, string> = {
+        name,
+        inviteCode,
+    };
+
+    if (contactNumber?.trim()) {
+        payload.contactNumber = contactNumber.trim();
+    }
+
+    const res = await apiFetch("/auth/invited/user/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+}
+
 export async function login(email: string, password: string) {
     const res = await apiFetch("/auth/user/login", {
         method: "POST",

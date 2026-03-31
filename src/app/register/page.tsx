@@ -1,11 +1,13 @@
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { signup } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+import { signup, signupInvitedUser } from "@/lib/api";
 
 export default function RegisterPage() {
-    const router = useRouter();
+    const searchParams = useSearchParams();
+    const inviteCode = searchParams.get("inviteCode")?.trim() || "";
+    const isInviteFlow = Boolean(inviteCode);
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -34,15 +36,16 @@ export default function RegisterPage() {
         if (
             !formData.firstName ||
             !formData.lastName ||
-            !formData.email ||
-            !formData.password ||
-            !formData.companyName ||
-            !formData.contactNumber
+            !formData.email
         ) {
-            setError("All fields are required");
+            setError("Please fill all required fields");
             return;
         }
-        if (formData.password.length < 6) {
+        if (!isInviteFlow && (!formData.password || !formData.companyName)) {
+            setError("Please fill all required fields");
+            return;
+        }
+        if (!isInviteFlow && formData.password.length < 6) {
             setError("Password must be at least 6 characters long");
             return;
         }
@@ -52,24 +55,36 @@ export default function RegisterPage() {
             const fullName = `${formData.firstName} ${formData.lastName}`.trim();
             console.log("Registering:", formData.email);
 
-            const result = await signup(
-                formData.email.trim(),
-                fullName,
-                formData.password,
-                formData.contactNumber.trim()
-            );
+            const result = isInviteFlow
+                ? await signupInvitedUser(
+                    fullName,
+                    inviteCode,
+                    formData.contactNumber.trim() || undefined
+                )
+                : await signup(
+                    formData.email.trim(),
+                    fullName,
+                    formData.password,
+                    formData.contactNumber.trim() || undefined
+                );
 
             console.log("Registration response:", result);
 
             const isSuccess =
                 result.success ||
+                result.status === "success" ||
                 result.status === 201 ||
                 (result.message && result.message.toLowerCase().includes("verification email sent")) ||
-                (result.message && result.message.toLowerCase().includes("registered successfully"));
+                (result.message && result.message.toLowerCase().includes("registered successfully")) ||
+                (result.message && result.message.toLowerCase().includes("otp"));
 
             if (isSuccess) {
-                // Redirect to OTP page
-                const targetUrl = `/verify-otp?email=${encodeURIComponent(formData.email.trim())}`;
+                const responseEmail =
+                    result?.data?.user?.email ||
+                    result?.data?.email ||
+                    result?.email ||
+                    formData.email.trim();
+                const targetUrl = `/verify-otp?email=${encodeURIComponent(responseEmail)}&action=signup`;
                 window.location.href = targetUrl;
             } else {
                 setError(result.message || result.error || "Registration failed. Please try again.");
@@ -89,7 +104,11 @@ export default function RegisterPage() {
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
-                            <p className="text-gray-500">Join Reflow to manage your industrial IoT.</p>
+                            <p className="text-gray-500">
+                                {isInviteFlow
+                                    ? "Complete your invite signup and verify via OTP."
+                                    : "Join Reflow to manage your industrial IoT."}
+                            </p>
                         </div>
                         <Link
                             href="/"
@@ -149,51 +168,56 @@ export default function RegisterPage() {
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
-                            <div className="relative">
-                                <input
-                                    type={showPassword ? "text" : "password"}
-                                    name="password"
-                                    required
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-900 bg-gray-50 focus:bg-white pr-12"
-                                    placeholder="Min. 6 characters"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                    {showPassword ? "Hide" : "Show"}
-                                </button>
+                        {!isInviteFlow && (
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        name="password"
+                                        required
+                                        value={formData.password}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-900 bg-gray-50 focus:bg-white pr-12"
+                                        placeholder="Min. 6 characters"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        {showPassword ? "Hide" : "Show"}
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className={`grid grid-cols-1 ${isInviteFlow ? "" : "md:grid-cols-2"} gap-6`}>
+                            {!isInviteFlow && (
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Company Name</label>
+                                    <input
+                                        type="text"
+                                        name="companyName"
+                                        required
+                                        value={formData.companyName}
+                                        onChange={handleChange}
+                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-900 bg-gray-50 focus:bg-white"
+                                        placeholder="ACME Corp"
+                                    />
+                                </div>
+                            )}
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Company Name</label>
-                                <input
-                                    type="text"
-                                    name="companyName"
-                                    required
-                                    value={formData.companyName}
-                                    onChange={handleChange}
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-900 bg-gray-50 focus:bg-white"
-                                    placeholder="ACME Corp"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Contact Number</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                    Contact Number <span className="text-gray-400 font-normal">(Optional)</span>
+                                </label>
                                 <input
                                     type="tel"
                                     name="contactNumber"
-                                    required
                                     value={formData.contactNumber}
                                     onChange={handleChange}
                                     className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-gray-900 bg-gray-50 focus:bg-white"
-                                    placeholder="+1 234 567 8900"
+                                    placeholder="+91 9876543210"
                                 />
                             </div>
                         </div>
@@ -207,7 +231,7 @@ export default function RegisterPage() {
                                     : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg'
                                 }`}
                         >
-                            {loading ? "Creating Account..." : "Create Account"}
+                            {loading ? "Creating Account..." : isInviteFlow ? "Create Invited Account" : "Create Account"}
                         </button>
                     </form>
 

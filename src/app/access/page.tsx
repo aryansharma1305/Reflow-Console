@@ -17,7 +17,6 @@ import {
     getAllProjects,
     shareProject,
     isAuthenticated,
-    isOwnerProject,
     normalizeProjectsResponse,
 } from "@/lib/api";
 import {
@@ -230,13 +229,13 @@ export default function AccessPage() {
             // Projects
             const normalizedProjects = normalizeProjectsResponse(projData || {});
             const allProjects = normalizedProjects.projects as Project[];
-            const shareableProjects = allProjects.filter((project) => isOwnerProject(project, email || ""));
+            const shareableProjects = (normalizedProjects.createdByMe as Project[]);
             const inviteProjects = shareableProjects.length > 0 ? shareableProjects : allProjects;
 
             setProjects(inviteProjects);
             setOwnedProjectCount(
                 normalizedProjects.stats.createdByMeCount ||
-                allProjects.filter((project) => isOwnerProject(project, email || "")).length
+                shareableProjects.length
             );
 
             if (inviteProjects.length > 0 && !selectedProjectId) {

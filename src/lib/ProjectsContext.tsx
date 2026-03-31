@@ -38,6 +38,8 @@ interface Project {
 
 interface ProjectsContextValue {
     projects: Project[];
+    createdByMeProjects: Project[];
+    sharedWithMeProjects: Project[];
     devices: Device[];
     loading: boolean;
     error: string | null;
@@ -55,6 +57,8 @@ const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 
 export function ProjectsProvider({ children }: { children: ReactNode }) {
     const [projects, setProjects] = useState<Project[]>([]);
+    const [createdByMeProjects, setCreatedByMeProjects] = useState<Project[]>([]);
+    const [sharedWithMeProjects, setSharedWithMeProjects] = useState<Project[]>([]);
     const [devices, setDevices] = useState<Device[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -75,7 +79,10 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
             console.time("[Cache] fetchAll");
 
             const data = await getAllProjects();
-            const projectList = normalizeProjectsResponse(data).projects as Project[];
+            const normalized = normalizeProjectsResponse(data);
+            const projectList = normalized.projects as Project[];
+            const ownedList = normalized.createdByMe as Project[];
+            const sharedList = normalized.sharedWithMe as Project[];
 
             // If projects already have devices nested, use them directly.
             // Otherwise fetch devices per project concurrently.
@@ -147,6 +154,8 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
             }
 
             setProjects(projectList);
+            setCreatedByMeProjects(ownedList);
+            setSharedWithMeProjects(sharedList);
             setDevices(allDevices);
             setLastFetched(Date.now());
             console.timeEnd("[Cache] fetchAll");
@@ -156,8 +165,13 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
             try {
                 await new Promise((r) => setTimeout(r, 2000));
                 const data = await getAllProjects();
-                const projectList = normalizeProjectsResponse(data).projects as Project[];
+                const normalized = normalizeProjectsResponse(data);
+                const projectList = normalized.projects as Project[];
+                const ownedList = normalized.createdByMe as Project[];
+                const sharedList = normalized.sharedWithMe as Project[];
                 setProjects(projectList);
+                setCreatedByMeProjects(ownedList);
+                setSharedWithMeProjects(sharedList);
                 setLastFetched(Date.now());
                 console.log("[Cache] Retry succeeded");
             } catch (retryErr) {
@@ -185,6 +199,8 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
         <ProjectsContext.Provider
             value={{
                 projects,
+                createdByMeProjects,
+                sharedWithMeProjects,
                 devices,
                 loading,
                 error,

@@ -52,11 +52,22 @@ function getPayloadTimestamp(data: Record<string, unknown> | null | undefined): 
     const raw = data._ts ?? data.ts ?? data.timestamp ?? data.createdAt;
 
     if (typeof raw === "number" && Number.isFinite(raw)) {
-        return raw;
+        return raw < 1e12 ? raw * 1000 : raw;
     }
 
     if (typeof raw === "string") {
-        const parsed = Date.parse(raw);
+        const trimmed = raw.trim();
+        if (!trimmed) return null;
+
+        if (/^\d+$/.test(trimmed)) {
+            const asNum = Number(trimmed);
+            if (Number.isFinite(asNum)) {
+                return asNum < 1e12 ? asNum * 1000 : asNum;
+            }
+        }
+
+        const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+        const parsed = Date.parse(hasZone ? trimmed : `${trimmed}+05:30`);
         return Number.isNaN(parsed) ? null : parsed;
     }
 
@@ -138,6 +149,7 @@ export function useMqttDevice(
                     hour: "2-digit",
                     minute: "2-digit",
                     second: "2-digit",
+                    timeZone: "Asia/Kolkata",
                 });
 
                 if (isFresh && sampleTs > lastDataTs.current) {

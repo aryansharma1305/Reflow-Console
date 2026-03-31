@@ -23,6 +23,37 @@ if (process.env.NODE_ENV !== "production") {
 // generateMqttTopic now uses constants from mqtt.constants.js
 const generateMqttTopic = buildMqttTopic;
 
+function parsePayloadTimestamp(payload) {
+    if (!payload || typeof payload !== "object") return null;
+    const raw = payload._ts ?? payload.ts ?? payload.timestamp ?? payload.createdAt ?? payload.time;
+
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+        // Handle both seconds and milliseconds epoch values.
+        return raw < 1e12 ? raw * 1000 : raw;
+    }
+
+    if (typeof raw === "string") {
+        const trimmed = raw.trim();
+        if (!trimmed) return null;
+
+        // Numeric strings (seconds/ms epoch)
+        if (/^\d+$/.test(trimmed)) {
+            const asNum = Number(trimmed);
+            if (Number.isFinite(asNum)) {
+                return asNum < 1e12 ? asNum * 1000 : asNum;
+            }
+        }
+
+        // If timezone is omitted, treat it as IST explicitly.
+        const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+        const candidate = hasZone ? trimmed : `${trimmed}+05:30`;
+        const parsed = Date.parse(candidate);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    return null;
+}
+
 function getClient() {
     if (client && client.connected) return client;
 
@@ -55,7 +86,7 @@ function getClient() {
             const parsed = JSON.parse(message.toString());
             // Reconstruct the serialId from topic  e.g. "ABC/12/OUTPUT" → "ABC12"
             const serialId = extractSerialFromTopic(topic);
-            const channelData = { _ts: Date.now() };
+            const channelData = { _ts: parsePayloadTimestamp(parsed) };
             // Dynamically extract channel data using constants
             MQTT_CHANNEL_NAMES.forEach((ch) => {
                 channelData[ch] = parsed[ch] ?? null;

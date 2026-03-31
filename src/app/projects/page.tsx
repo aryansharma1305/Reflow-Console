@@ -8,7 +8,6 @@ import ProjectCard from "@/components/ProjectCard";
 import {
   getUserEmail,
   getUserName,
-  isOwnerProject,
 } from "@/lib/api";
 import { useOrgGuard } from "@/lib/useOrgGuard";
 import { useProjects } from "@/lib/ProjectsContext";
@@ -17,7 +16,7 @@ import { Plus, ArrowRight } from "lucide-react";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { projects, loading, error } = useProjects();
+  const { createdByMeProjects, sharedWithMeProjects, loading, error } = useProjects();
   const [showOrgSetup, setShowOrgSetup] = useState(false);
 
   const { hasOrg, orgChecked } = useOrgGuard();
@@ -25,15 +24,13 @@ export default function ProjectsPage() {
   const email = getUserEmail();
   const fullName = getUserName();
 
-  const { ownProjects, sharedProjects } = useMemo(() => {
-    const userEmail = getUserEmail();
-    const owned = projects.filter((p) => isOwnerProject(p, userEmail));
-    const shared = projects.filter((p) => !isOwnerProject(p, userEmail));
-    return {
-      ownProjects: owned,
-      sharedProjects: shared,
-    };
-  }, [projects]);
+  const { ownProjects, sharedProjects } = useMemo(
+    () => ({
+      ownProjects: createdByMeProjects,
+      sharedProjects: sharedWithMeProjects,
+    }),
+    [createdByMeProjects, sharedWithMeProjects]
+  );
 
   // Show org setup modal when triggered
   if (showOrgSetup) {

@@ -190,20 +190,47 @@ export default function AnalyticsPage() {
                 return;
             }
 
-            const keys = Object.keys(dataRowArray[0]).filter((k) => k !== "timestamp" && k !== "createdAt" && !k.startsWith("_"));
-            setChannelKeys(keys);
+            const candidateKeys = (dataRowArray as Array<Record<string, unknown>>).flatMap((row) =>
+                Object.keys(row).filter((k) =>
+                    k !== "timestamp" && k !== "createdAt" && !k.startsWith("_")
+                )
+            );
+            const keys: string[] = Array.from(new Set<string>(candidateKeys));
 
-            const mapped: ChartRow[] = dataRowArray.map((row: Record<string, string | number>) => {
-                const tsString = (row.timestamp || row.createdAt) as string;
-                return {
-                    ...row,
-                    time: new Date(tsString).toLocaleString("en-IN", {
-                        day: "2-digit", month: "short",
-                        hour: "2-digit", minute: "2-digit",
-                    }),
-                    ts: new Date(tsString).getTime(),
-                };
-            });
+            const mapped: ChartRow[] = (dataRowArray as Array<Record<string, unknown>>)
+                .map((row): ChartRow | null => {
+                    const tsRaw = row.timestamp ?? row.createdAt;
+                    const ts = new Date(String(tsRaw || "")).getTime();
+                    if (!Number.isFinite(ts)) return null;
+
+                    const normalized: ChartRow = {
+                        time: new Date(ts).toLocaleString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        }),
+                        timestamp: String(tsRaw || ""),
+                        ts,
+                    };
+
+                    keys.forEach((key) => {
+                        const rawVal = row[key];
+                        const parsed = typeof rawVal === "number" ? rawVal : Number(String(rawVal));
+                        if (Number.isFinite(parsed)) {
+                            normalized[key] = parsed;
+                        }
+                    });
+
+                    return normalized;
+                })
+                .filter((row): row is ChartRow => Boolean(row))
+                .sort((a: ChartRow, b: ChartRow) => (a.ts || 0) - (b.ts || 0));
+
+            const numericKeys = keys.filter((key) =>
+                mapped.some((row) => typeof row[key] === "number")
+            );
+            setChannelKeys(numericKeys);
             setChartData(mapped);
         } catch (err: any) {
             console.error("[Analytics] Fetch history failed", err);
@@ -523,6 +550,7 @@ export default function AnalyticsPage() {
                             key={key} type="monotone" dataKey={key} name={channelConfig[key] || key}
                             stroke={COLORS[i % COLORS.length]} strokeWidth={2}
                             fill={`url(#ag-${key})`} dot={false} activeDot={{ r: 4 }}
+                            connectNulls
                             isAnimationActive={false}
                         />
                     ))}
@@ -538,6 +566,7 @@ export default function AnalyticsPage() {
                         key={key} type="monotone" dataKey={key} name={channelConfig[key] || key}
                         stroke={COLORS[i % COLORS.length]} strokeWidth={2}
                         dot={false} activeDot={{ r: 4 }}
+                        connectNulls
                         isAnimationActive={false}
                     />
                 ))}

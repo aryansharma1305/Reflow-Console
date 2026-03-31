@@ -8,7 +8,6 @@ import {
     getUserEmail,
     getUserName,
     isAuthenticated,
-    isOwnerProject,
 } from "@/lib/api";
 import { useProjects } from "@/lib/ProjectsContext";
 import {
@@ -74,15 +73,17 @@ export default function SharedAccessPage() {
     const email = getUserEmail();
     const fullName = getUserName();
 
-    const { projects: cachedProjects } = useProjects();
+    const {
+        createdByMeProjects,
+        sharedWithMeProjects,
+    } = useProjects();
 
     useEffect(() => {
         if (!isAuthenticated()) return;
         const userEmail = getUserEmail();
 
         // Projects I own (for share dropdown)
-        const owned = cachedProjects
-            .filter((p: any) => isOwnerProject(p, userEmail))
+        const owned = createdByMeProjects
             .map((p: any) => ({
                 id: p.id || p._id,
                 name: p.name,
@@ -94,8 +95,7 @@ export default function SharedAccessPage() {
         }
 
         // Projects shared with me
-        const shared = cachedProjects
-            .filter((p: any) => !isOwnerProject(p, userEmail))
+        const shared = sharedWithMeProjects
             .map((p: any) => {
                 const myMembership = p.members?.find(
                     (m: any) => m.user?.email === userEmail
@@ -113,7 +113,7 @@ export default function SharedAccessPage() {
             });
 
         setSharedProjects(shared);
-    }, [cachedProjects]);
+    }, [createdByMeProjects, sharedWithMeProjects]);
 
     async function handleInvite() {
         if (!inviteEmail || !selectedProject) {

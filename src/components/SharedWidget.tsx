@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useProjects } from "@/lib/ProjectsContext";
-import { getUserEmail, isOwnerProject } from "@/lib/api";
+import { getUserEmail } from "@/lib/api";
 
 const roleStyles: Record<string, string> = {
     Editor: "badge-editor",
@@ -19,12 +19,11 @@ const roleStyles: Record<string, string> = {
 const avatarColors = ["bg-blue-500", "bg-purple-500", "bg-teal-500", "bg-orange-500", "bg-rose-500"];
 
 export default function SharedWidget() {
-    const { projects, loading } = useProjects();
+    const { sharedWithMeProjects, loading } = useProjects();
 
     const sharedProjects = useMemo(() => {
         const userEmail = getUserEmail();
-        return projects
-            .filter((p) => !isOwnerProject(p, userEmail))
+        return sharedWithMeProjects
             .map((p) => {
                 const myMembership = p.members?.find(
                     (m: any) => m.user?.email === userEmail
@@ -38,7 +37,7 @@ export default function SharedWidget() {
                           (myMembership?.role || fallbackRole).slice(1).toLowerCase(),
                 };
             });
-    }, [projects]);
+    }, [sharedWithMeProjects]);
 
     return (
         <motion.div

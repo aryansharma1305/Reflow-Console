@@ -17,7 +17,6 @@ import {
   getUserEmail,
   getUserName,
   isAuthenticated,
-  isOwnerProject,
 } from "@/lib/api";
 import { useProjects } from "@/lib/ProjectsContext";
 import { useOrgGuard } from "@/lib/useOrgGuard";
@@ -38,7 +37,19 @@ async function checkDeviceOnline(serialId: string): Promise<boolean> {
     if (!res.ok) return false;
     const data = await res.json();
     const rawTs = data?._ts ?? data?.timestamp ?? data?.createdAt;
-    const ts = typeof rawTs === "number" ? rawTs : Date.parse(String(rawTs || ""));
+    let ts = Number.NaN;
+    if (typeof rawTs === "number" && Number.isFinite(rawTs)) {
+      ts = rawTs < 1e12 ? rawTs * 1000 : rawTs;
+    } else if (typeof rawTs === "string" && rawTs.trim()) {
+      const trimmed = rawTs.trim();
+      if (/^\d+$/.test(trimmed)) {
+        const asNum = Number(trimmed);
+        ts = Number.isFinite(asNum) ? (asNum < 1e12 ? asNum * 1000 : asNum) : Number.NaN;
+      } else {
+        const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+        ts = Date.parse(hasZone ? trimmed : `${trimmed}+05:30`);
+      }
+    }
     const isFresh = Number.isFinite(ts)
       ? (Date.now() - ts) < POLLING_CONFIG.MQTT_ONLINE_THRESHOLD
       : false;
@@ -59,7 +70,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [showOrgSetup, setShowOrgSetup] = useState(false);
   const { hasOrg, orgChecked } = useOrgGuard();
-  const { projects, devices, loading, error, refresh } = useProjects();
+  const { projects, createdByMeProjects, sharedWithMeProjects, devices, loading, error, refresh } = useProjects();
   const [mqttChecking, setMqttChecking] = useState(false);
   const [activeDevices, setActiveDevices] = useState(0);
 
@@ -109,9 +120,9 @@ function DashboardContent() {
     totalProjects: projects.length,
     totalDevices: devices.length,
     activeDevices,
-    ownedProjects: projects.filter((p) => isOwnerProject(p, getUserEmail())).length,
-    sharedProjects: projects.filter((p) => !isOwnerProject(p, getUserEmail())).length,
-  }), [projects, devices, activeDevices]);
+    ownedProjects: createdByMeProjects.length,
+    sharedProjects: sharedWithMeProjects.length,
+  }), [projects, devices, activeDevices, createdByMeProjects, sharedWithMeProjects]);
 
   const recentProjects = useMemo(() => {
     return [...projects]
