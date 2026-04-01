@@ -23,34 +23,51 @@ if (process.env.NODE_ENV !== "production") {
 // generateMqttTopic now uses constants from mqtt.constants.js
 const generateMqttTopic = buildMqttTopic;
 
+/**
+ * Parse a timestamp from a device MQTT payload.
+ * Priority: UpdateTimeStamp (device IST field) > _ts > ts > timestamp > createdAt > time
+ * UpdateTimeStamp strings with no timezone are treated as IST (+05:30).
+ */
 function parsePayloadTimestamp(payload) {
     if (!payload || typeof payload !== "object") return null;
-    const raw = payload._ts ?? payload.ts ?? payload.timestamp ?? payload.createdAt ?? payload.time;
 
-    if (typeof raw === "number" && Number.isFinite(raw)) {
-        // Handle both seconds and milliseconds epoch values.
-        return raw < 1e12 ? raw * 1000 : raw;
+    // Primary: device-provided UpdateTimeStamp (IST string or epoch)
+    const updateTs = payload.UpdateTimeStamp ?? payload.updateTimestamp ?? payload.update_timestamp;
+    if (updateTs !== undefined && updateTs !== null) {
+        if (typeof updateTs === "number" && Number.isFinite(updateTs)) {
+            return updateTs < 1e12 ? updateTs * 1000 : updateTs;
+        }
+        if (typeof updateTs === "string" && updateTs.trim()) {
+            const trimmed = updateTs.trim();
+            if (/^\d+$/.test(trimmed)) {
+                const asNum = Number(trimmed);
+                if (Number.isFinite(asNum)) return asNum < 1e12 ? asNum * 1000 : asNum;
+            }
+            // No timezone → treat as IST
+            const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+            const candidate = hasZone ? trimmed : `${trimmed}+05:30`;
+            const parsed = Date.parse(candidate);
+            if (!Number.isNaN(parsed)) return parsed;
+        }
     }
 
+    // Fallback: generic _ts / ts / timestamp / createdAt / time fields
+    const raw = payload._ts ?? payload.ts ?? payload.timestamp ?? payload.createdAt ?? payload.time;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+        return raw < 1e12 ? raw * 1000 : raw;
+    }
     if (typeof raw === "string") {
         const trimmed = raw.trim();
         if (!trimmed) return null;
-
-        // Numeric strings (seconds/ms epoch)
         if (/^\d+$/.test(trimmed)) {
             const asNum = Number(trimmed);
-            if (Number.isFinite(asNum)) {
-                return asNum < 1e12 ? asNum * 1000 : asNum;
-            }
+            if (Number.isFinite(asNum)) return asNum < 1e12 ? asNum * 1000 : asNum;
         }
-
-        // If timezone is omitted, treat it as IST explicitly.
         const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
         const candidate = hasZone ? trimmed : `${trimmed}+05:30`;
         const parsed = Date.parse(candidate);
         return Number.isNaN(parsed) ? null : parsed;
     }
-
     return null;
 }
 
@@ -86,12 +103,16 @@ function getClient() {
             const parsed = JSON.parse(message.toString());
             // Reconstruct the serialId from topic  e.g. "ABC/12/OUTPUT" → "ABC12"
             const serialId = extractSerialFromTopic(topic);
-            const payloadTs = parsePayloadTimestamp(parsed);
+            const payloadTs = parsePayloadTimestamp(parsed); // uses UpdateTimeStamp first
             const receivedAt = Date.now();
             const channelData = {
-                _ts: payloadTs ?? receivedAt,
-                _rxTs: receivedAt,
+                _ts: payloadTs,       // device UpdateTimeStamp (ms epoch, IST-parsed), or null
+                _rxTs: receivedAt,    // wall-clock of this specific MQTT delivery
                 _hasPayloadTs: payloadTs !== null,
+                // ERR: 0 = no error, 1 = sensor not connected / malfunctioning
+                _err: parsed.ERR ?? parsed.err ?? parsed.Error ?? null,
+                // Preserve raw UpdateTimeStamp string for display/debugging
+                _updateTs: parsed.UpdateTimeStamp ?? parsed.updateTimestamp ?? null,
             };
             // Dynamically extract channel data using constants
             MQTT_CHANNEL_NAMES.forEach((ch) => {
@@ -102,6 +123,7 @@ function getClient() {
             console.error("[MQTT Readings] Failed to parse message:", error.message);
         }
     });
+
 
     client.on("error", (err) => {
         console.error("[MQTT Readings] Connection error:", err.message);
@@ -156,10 +178,12 @@ export async function GET(req) {
         // Subscribe (no-op if already subscribed)
         await ensureSubscribed(mqttClient, serialId);
 
-        // If we already have fresh data (< 5s old), return it immediately
+        // If we already have fresh data (received < 5s ago), return it immediately.
+        // Use _rxTs (server-receive time) for the cache check — _ts can be null when
+        // the device doesn't embed its own timestamp.
         const cached = mqttData[serialId];
-        const cachedTs = typeof cached?._ts === "number" ? cached._ts : NaN;
-        if (cached && Number.isFinite(cachedTs) && (Date.now() - cachedTs) < MQTT_POLLING_CONFIG.CACHE_CHECK_INTERVAL) {
+        const cachedRxTs = typeof cached?._rxTs === "number" ? cached._rxTs : NaN;
+        if (cached && Number.isFinite(cachedRxTs) && (Date.now() - cachedRxTs) < MQTT_POLLING_CONFIG.CACHE_CHECK_INTERVAL) {
             return NextResponse.json(cached);
         }
 
@@ -174,8 +198,10 @@ export async function GET(req) {
             RawCH4: data.RawCH4 ?? null,
             RawCH5: data.RawCH5 ?? null,
             RawCH6: data.RawCH6 ?? null,
-            _ts: data._ts ?? null,
-            _rxTs: data._rxTs ?? null,
+            _ts: data._ts ?? null,           // device UpdateTimeStamp (ms epoch)
+            _rxTs: data._rxTs ?? null,       // server-receive time
+            _err: data._err ?? null,         // ERR field: 0=ok, 1=sensor fault
+            _updateTs: data._updateTs ?? null, // raw UpdateTimeStamp string
         });
     } catch (error) {
         console.error("[MQTT Readings] Error:", error.message);

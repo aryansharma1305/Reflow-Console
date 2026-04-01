@@ -29,6 +29,10 @@ export interface UseMqttDeviceResult {
     isOnline: boolean;
     lastSync: string | null;
     mqttError: boolean;
+    /** true when latest payload has ERR === 1 (sensor not connected / malfunctioning) */
+    sensorErr: boolean;
+    /** Raw UpdateTimeStamp string from device payload, for display */
+    updateTs: string | null;
     /** Rolling history of raw readings — up to `maxHistory` points */
     history: MqttHistoryRow[];
     /** Raw last message object from MQTT */
@@ -92,6 +96,8 @@ export function useMqttDevice(
     const [isOnline, setIsOnline] = useState(false);
     const [lastSync, setLastSync] = useState<string | null>(null);
     const [mqttError, setMqttError] = useState(false);
+    const [sensorErr, setSensorErr] = useState(false);
+    const [updateTs, setUpdateTs] = useState<string | null>(null);
     const [history, setHistory] = useState<MqttHistoryRow[]>([]);
     const [rawData, setRawData] = useState<Record<string, number | null>>({});
 
@@ -119,9 +125,27 @@ export function useMqttDevice(
 
             const hasData = raw.some((v) => v !== null);
             const payloadTs = getPayloadTimestamp(data as Record<string, unknown>);
-            const sampleTs = payloadTs ?? (hasData ? Date.now() : lastDataTs.current);
+
+            // ── Freshness determination ──────────────────────────────────────
+            // Priority:
+            //   1. Device-embedded _ts  (most accurate — set by the device itself)
+            //   2. Server-receive _rxTs (when broker delivered the message to us)
+            //      This is NOT Date.now(); it was stamped by the API route when the
+            //      MQTT message arrived. For a retained message from an offline device,
+            //      _rxTs will be old once the threshold elapses, correctly marking offline.
+            //   3. If neither exists → treat as offline.
+            //
+            // NEVER fall back to Date.now() — that would make stale retained messages
+            // appear fresh and show the device as Online when it's actually offline.
+            const rxTs =
+                typeof (data as any)?._rxTs === "number" && Number.isFinite((data as any)?._rxTs)
+                    ? (data as any)._rxTs as number
+                    : null;
+
+            const sampleTs = payloadTs ?? rxTs ?? 0;
             const age = sampleTs > 0 ? Date.now() - sampleTs : Number.POSITIVE_INFINITY;
             const isFresh = sampleTs > 0 && age < onlineThresholdMs;
+
 
             if (hasData) {
                 // Build channel objects
@@ -137,6 +161,14 @@ export function useMqttDevice(
 
                 prevRaw.current = raw;
                 setChannels(built);
+
+                // ERR field: 0 = ok, 1 = sensor not connected / malfunctioning
+                const errVal = (data as any)?._err;
+                setSensorErr(errVal === 1 || errVal === "1");
+
+                // Raw UpdateTimeStamp string for display
+                const rawUpdateTs = (data as any)?._updateTs ?? null;
+                setUpdateTs(typeof rawUpdateTs === "string" ? rawUpdateTs : null);
 
                 // Build raw data map
                 const rawMap: Record<string, number | null> = {};
@@ -199,6 +231,8 @@ export function useMqttDevice(
         isOnline,
         lastSync,
         mqttError,
+        sensorErr,
+        updateTs,
         history,
         rawData,
         refresh: fetchData,
@@ -213,9 +247,10 @@ export function useMqttStatus(
     serialNumber: string | null | undefined,
     intervalMs = POLLING_CONFIG.MQTT_STATUS_POLL,
     onlineThresholdMs = POLLING_CONFIG.MQTT_ONLINE_THRESHOLD
-): { isOnline: boolean; checked: boolean } {
+): { isOnline: boolean; checked: boolean; sensorErr: boolean } {
     const [isOnline, setIsOnline] = useState(false);
     const [checked, setChecked] = useState(false);
+    const [sensorErr, setSensorErr] = useState(false);
 
     useEffect(() => {
         if (!serialNumber) return;
@@ -231,18 +266,27 @@ export function useMqttStatus(
                         .map((ch) => data[ch])
                         .some((v) => v !== null && v !== undefined);
                 const payloadTs = getPayloadTimestamp(data as Record<string, unknown>);
-                const fallbackTs = hasData ? Date.now() : null;
-                const freshnessTs = payloadTs ?? fallbackTs;
+                // Use server-receive time (_rxTs) as fallback — NOT Date.now().
+                // Retained messages from an offline device become stale once _rxTs + threshold elapses.
+                const rxTs =
+                    typeof (data as any)?._rxTs === "number" && Number.isFinite((data as any)?._rxTs)
+                        ? (data as any)._rxTs as number
+                        : null;
+                const freshnessTs = payloadTs ?? rxTs;
                 const isFresh = freshnessTs !== null
                     ? (Date.now() - freshnessTs) < onlineThresholdMs
                     : false;
+                // ERR field: 0 = ok, 1 = sensor not connected / malfunctioning
+                const errVal = (data as any)?._err;
                 if (mounted) {
                     setIsOnline(Boolean(hasData && isFresh));
+                    setSensorErr(errVal === 1 || errVal === "1");
                     setChecked(true);
                 }
             } catch {
                 if (mounted) {
                     setIsOnline(false);
+                    setSensorErr(false);
                     setChecked(true);
                 }
             }
@@ -256,5 +300,5 @@ export function useMqttStatus(
         };
     }, [serialNumber, intervalMs, onlineThresholdMs]);
 
-    return { isOnline, checked };
+    return { isOnline, checked, sensorErr };
 }

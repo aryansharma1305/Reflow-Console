@@ -40,6 +40,10 @@ async function checkDeviceOnline(serialId: string): Promise<boolean> {
       [data.RawCH1, data.RawCH2, data.RawCH3, data.RawCH4, data.RawCH5, data.RawCH6].some(
         (v) => v !== null && v !== undefined
       );
+    // ── Freshness determination ──────────────────────────────────────
+    // Prefer the device-embedded timestamp (_ts), fall back to the server-receive
+    // time (_rxTs). NEVER use Date.now() as fallback — retained MQTT messages
+    // from offline devices would always appear fresh/online.
     const rawTs = data?._ts ?? data?.timestamp ?? data?.createdAt;
     let ts = Number.NaN;
     if (typeof rawTs === "number" && Number.isFinite(rawTs)) {
@@ -54,11 +58,9 @@ async function checkDeviceOnline(serialId: string): Promise<boolean> {
         ts = Date.parse(hasZone ? trimmed : `${trimmed}+05:30`);
       }
     }
+    // Use _rxTs (server-receive time) as fallback — NOT Date.now()
     if (!Number.isFinite(ts) && typeof data?._rxTs === "number" && Number.isFinite(data._rxTs)) {
       ts = data._rxTs;
-    }
-    if (!Number.isFinite(ts) && hasData) {
-      ts = Date.now();
     }
     const isFresh = Number.isFinite(ts)
       ? (Date.now() - ts) < POLLING_CONFIG.MQTT_ONLINE_THRESHOLD

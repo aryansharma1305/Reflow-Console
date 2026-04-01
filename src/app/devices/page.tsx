@@ -15,7 +15,7 @@ import { Cpu, Plus, Search, ChevronRight, RefreshCw } from "lucide-react";
 
 // ── Per-row MQTT status badge ────────────────────────────────────
 function DeviceStatusBadge({ serial }: { serial: string }) {
-    const { isOnline, checked } = useMqttStatus(serial, 8000);
+    const { isOnline, checked, sensorErr } = useMqttStatus(serial, 8000);
 
     if (!checked) {
         return (
@@ -27,20 +27,27 @@ function DeviceStatusBadge({ serial }: { serial: string }) {
     }
 
     return (
-        <span
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                isOnline
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-red-100 text-red-600"
-            }`}
-        >
+        <div className="flex items-center gap-1.5 flex-wrap">
             <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                    isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    isOnline
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-red-100 text-red-600"
                 }`}
-            />
-            {isOnline ? "Online" : "Offline"}
-        </span>
+            >
+                <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                        isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                    }`}
+                />
+                {isOnline ? "Online" : "Offline"}
+            </span>
+            {sensorErr && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                    ⚠ Sensor Fault
+                </span>
+            )}
+        </div>
     );
 }
 
