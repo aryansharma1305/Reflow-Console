@@ -128,15 +128,9 @@ export function useMqttDevice(
             const isRetained = (data as any)?._isRetained === true;
 
             // ── Freshness determination ──────────────────────────────────────
-            // A message can be:
-            //   A) LIVE  (isRetained=false) — device just sent this right now
-            //      → use payloadTs (_ts) if available, else _rxTs (server receive = now)
-            //   B) RETAINED (isRetained=true) — broker replay of last-ever message from device
-            //      The device may have been offline for days.
-            //      → ONLY trust _ts (device's UpdateTimeStamp). If _ts is absent, we have
-            //        NO proof of freshness → sampleTs=0 → Offline.
-            //
-            // Never use Date.now() or _rxTs from a retained message as freshness proof.
+            // PRIMARY:  UpdateTimeStamp (_ts) from device payload – if within 60s → Online
+            // FALLBACK: _rxTs (server receive time) – ONLY for live messages
+            //           (subscribedAt window on server sets _rxTs=0 for retained replays)
             const rxTs =
                 !isRetained &&
                 typeof (data as any)?._rxTs === "number" &&
@@ -269,8 +263,7 @@ export function useMqttStatus(
                         .some((v) => v !== null && v !== undefined);
                 const payloadTs = getPayloadTimestamp(data as Record<string, unknown>);
                 const isRetained = (data as any)?._isRetained === true;
-                // Same rule as useMqttDevice:
-                // Retained message + no device timestamp → no proof of freshness → Offline
+                // PRIMARY: UpdateTimeStamp. FALLBACK: _rxTs (live only via subscribedAt window)
                 const rxTs =
                     !isRetained &&
                     typeof (data as any)?._rxTs === "number" &&

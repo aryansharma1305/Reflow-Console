@@ -48,10 +48,9 @@ export const POLLING_CONFIG = {
   MQTT_POLL_INTERVAL: 3000,         // 3 seconds - primary polling
   MQTT_SECONDARY_INTERVAL: 5000,    // 5 seconds - secondary check
   MQTT_HISTORY_MAX_POINTS: 60,
-  // 120s threshold — UpdateTimeStamp (device IST) is the primary freshness anchor,
-  // so retained stale messages show Offline immediately. This fallback threshold
-  // only applies when the device has no embedded timestamp.
-  MQTT_ONLINE_THRESHOLD: 120_000,
+  // 60s threshold — if UpdateTimeStamp (device IST) is within 1 min of now → Online.
+  // Retained stale messages show Offline immediately via subscribedAt window on server.
+  MQTT_ONLINE_THRESHOLD: 60_000,
   MQTT_STATUS_POLL: 15_000,         // 15 seconds - status badge check interval
   ANALYTICS_AUTO_FETCH: 7000,       // Auto-fetch analytics after delay
   DASHBOARD_MQTT_REFRESH: 30_000,   // 30 seconds - refresh MQTT stats on dashboard
