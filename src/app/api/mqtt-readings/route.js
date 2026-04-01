@@ -98,23 +98,36 @@ function getClient() {
         }
     });
 
-    client.on("message", (topic, message) => {
+    client.on("message", (topic, message, packet) => {
         try {
             const parsed = JSON.parse(message.toString());
-            // Reconstruct the serialId from topic  e.g. "ABC/12/OUTPUT" → "ABC12"
             const serialId = extractSerialFromTopic(topic);
             const payloadTs = parsePayloadTimestamp(parsed); // uses UpdateTimeStamp first
             const receivedAt = Date.now();
+
+            // packet.retain === true means this is a RETAINED message delivered by the broker
+            // on subscribe — NOT a live message from the device. The device may be offline.
+            //
+            // If the device embeds UpdateTimeStamp (_ts), we can still judge freshness from it.
+            // But if _ts is null (device has no timestamp), we have no way to know how stale
+            // the retained message is — we MUST NOT use receivedAt as the timestamp, or the
+            // device will always appear Online right after subscribe.
+            //
+            // Fix: for retained messages, _rxTs = payloadTs (device's own ts) or 0 (unknown).
+            // For live messages (retain=false), _rxTs = receivedAt (correct — device just sent it).
+            const isRetained = packet?.retain === true;
             const channelData = {
-                _ts: payloadTs,       // device UpdateTimeStamp (ms epoch, IST-parsed), or null
-                _rxTs: receivedAt,    // wall-clock of this specific MQTT delivery
+                _ts: payloadTs,
+                // For retained messages: use device timestamp if available, else 0 (unknown)
+                // For live messages: use server receive time (device just sent this)
+                _rxTs: isRetained ? (payloadTs ?? 0) : receivedAt,
                 _hasPayloadTs: payloadTs !== null,
+                _isRetained: isRetained,
                 // ERR: 0 = no error, 1 = sensor not connected / malfunctioning
                 _err: parsed.ERR ?? parsed.err ?? parsed.Error ?? null,
                 // Preserve raw UpdateTimeStamp string for display/debugging
                 _updateTs: parsed.UpdateTimeStamp ?? parsed.updateTimestamp ?? null,
             };
-            // Dynamically extract channel data using constants
             MQTT_CHANNEL_NAMES.forEach((ch) => {
                 channelData[ch] = parsed[ch] ?? null;
             });
@@ -123,6 +136,7 @@ function getClient() {
             console.error("[MQTT Readings] Failed to parse message:", error.message);
         }
     });
+
 
 
     client.on("error", (err) => {
@@ -198,10 +212,11 @@ export async function GET(req) {
             RawCH4: data.RawCH4 ?? null,
             RawCH5: data.RawCH5 ?? null,
             RawCH6: data.RawCH6 ?? null,
-            _ts: data._ts ?? null,           // device UpdateTimeStamp (ms epoch)
-            _rxTs: data._rxTs ?? null,       // server-receive time
-            _err: data._err ?? null,         // ERR field: 0=ok, 1=sensor fault
+            _ts: data._ts ?? null,             // device UpdateTimeStamp (ms epoch)
+            _rxTs: data._rxTs ?? null,         // server-receive time (0 = unknown for retained)
+            _err: data._err ?? null,           // ERR field: 0=ok, 1=sensor fault
             _updateTs: data._updateTs ?? null, // raw UpdateTimeStamp string
+            _isRetained: data._isRetained ?? false, // true = retained broker message (device may be offline)
         });
     } catch (error) {
         console.error("[MQTT Readings] Error:", error.message);

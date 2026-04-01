@@ -36,16 +36,21 @@ async function checkDeviceOnline(serialId: string): Promise<boolean> {
     const res = await fetch(`/api/mqtt-readings?serialId=${serialId}`);
     if (!res.ok) return false;
     const data = await res.json();
+    if (data.error) return false;
+
     const hasData =
       [data.RawCH1, data.RawCH2, data.RawCH3, data.RawCH4, data.RawCH5, data.RawCH6].some(
         (v) => v !== null && v !== undefined
       );
+    if (!hasData) return false;
+
     // ── Freshness determination ──────────────────────────────────────
-    // Prefer the device-embedded timestamp (_ts), fall back to the server-receive
-    // time (_rxTs). NEVER use Date.now() as fallback — retained MQTT messages
-    // from offline devices would always appear fresh/online.
+    // Prefer device-embedded _ts (UpdateTimeStamp), then _rxTs (only for live messages).
+    // If _isRetained=true and no _ts → broker replay of old message → cannot confirm online.
+    const isRetained = data._isRetained === true;
     const rawTs = data?._ts ?? data?.timestamp ?? data?.createdAt;
     let ts = Number.NaN;
+
     if (typeof rawTs === "number" && Number.isFinite(rawTs)) {
       ts = rawTs < 1e12 ? rawTs * 1000 : rawTs;
     } else if (typeof rawTs === "string" && rawTs.trim()) {
@@ -58,18 +63,17 @@ async function checkDeviceOnline(serialId: string): Promise<boolean> {
         ts = Date.parse(hasZone ? trimmed : `${trimmed}+05:30`);
       }
     }
-    // Use _rxTs (server-receive time) as fallback — NOT Date.now()
-    if (!Number.isFinite(ts) && typeof data?._rxTs === "number" && Number.isFinite(data._rxTs)) {
+
+    // Only use _rxTs as fallback if this is a LIVE message (not retained)
+    if (!Number.isFinite(ts) && !isRetained && typeof data?._rxTs === "number" && data._rxTs > 0) {
       ts = data._rxTs;
     }
-    const isFresh = Number.isFinite(ts)
+
+    const isFresh = Number.isFinite(ts) && ts > 0
       ? (Date.now() - ts) < POLLING_CONFIG.MQTT_ONLINE_THRESHOLD
       : false;
-    return (
-      !data.error &&
-      hasData &&
-      isFresh
-    );
+
+    return isFresh;
   } catch {
     return false;
   }
