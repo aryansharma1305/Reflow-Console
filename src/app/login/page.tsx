@@ -199,9 +199,9 @@ export default function LoginPage() {
 
                             {loginMode === "password" && (
                                 <motion.div
-                                    initial={{ y: 20, opacity: 0 }}
+                                    initial={false}
                                     animate={{ y: 0, opacity: 1 }}
-                                    transition={{ delay: 0.55 }}
+                                    transition={{ duration: 0.12 }}
                                 >
                                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                                         Password
