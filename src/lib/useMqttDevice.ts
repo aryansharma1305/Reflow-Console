@@ -118,10 +118,13 @@ export function useMqttDevice(
                 return;
             }
 
-            // Build raw values using channel names from config
-            const raw = DEVICE_CHANNELS.getChannelNames().map(
-                (ch) => (data[ch] ?? null) as number | null
-            );
+            // Use calibrated CH values for display; fall back to RawCH if CH absent
+            const raw = [1, 2, 3, 4, 5, 6].map((i) => {
+                const cal = data[`CH${i}`];
+                const rawVal = data[`RawCH${i}`];
+                const v = cal ?? rawVal;
+                return v !== null && v !== undefined ? Number(v) : null;
+            }) as (number | null)[];
 
             const hasData = raw.some((v) => v !== null);
             const payloadTs = getPayloadTimestamp(data as Record<string, unknown>);
@@ -257,10 +260,10 @@ export function useMqttStatus(
                 const res = await fetch(`/api/mqtt-readings?serialId=${serialNumber}`);
                 if (!res.ok) throw new Error("bad response");
                 const data = await res.json();
-                const hasData = data && !data.error &&
-                    DEVICE_CHANNELS.getChannelNames()
-                        .map((ch) => data[ch])
-                        .some((v) => v !== null && v !== undefined);
+                const hasData = data && !data.error && [1, 2, 3, 4, 5, 6].some(
+                    (i) => (data[`CH${i}`] ?? data[`RawCH${i}`]) !== null &&
+                           (data[`CH${i}`] ?? data[`RawCH${i}`]) !== undefined
+                );
                 const payloadTs = getPayloadTimestamp(data as Record<string, unknown>);
                 const isRetained = (data as any)?._isRetained === true;
                 // PRIMARY: UpdateTimeStamp. FALLBACK: _rxTs (live only via subscribedAt window)

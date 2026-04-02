@@ -34,33 +34,58 @@ const RETAINED_REPLAY_WINDOW_MS = 800;
 
 /**
  * Parse a timestamp from a device MQTT payload.
- * Priority: UpdateTimeStamp (device IST field) > _ts > ts > timestamp > createdAt > time
- * UpdateTimeStamp strings with no timezone are treated as IST (+05:30).
+ * Handles all observed device timestamp formats:
+ *   - "02/04/26 13:07:49"  → DD/MM/YY HH:MM:SS (space separator)
+ *   - "02/04/26,13:01:47"  → DD/MM/YY,HH:MM:SS (comma separator)
+ *   - Standard ISO strings (fallback)
+ * Field name variants: UpdateTimeStamp, UpdateTimestamp, updateTimestamp, update_timestamp
+ * All times assumed IST (+05:30) unless timezone present.
  */
 function parsePayloadTimestamp(payload) {
     if (!payload || typeof payload !== "object") return null;
 
-    // Primary: device-provided UpdateTimeStamp (IST string or epoch)
-    const updateTs = payload.UpdateTimeStamp ?? payload.updateTimestamp ?? payload.update_timestamp;
+    // Collect all possible UpdateTimestamp field variants
+    const updateTs =
+        payload.UpdateTimeStamp ??   // 6-ch & 3-ch devices
+        payload.UpdateTimestamp ??   // 1-ch device (capital T, lowercase s)
+        payload.updateTimestamp ??
+        payload.update_timestamp;
+
     if (updateTs !== undefined && updateTs !== null) {
+        // Numeric epoch
         if (typeof updateTs === "number" && Number.isFinite(updateTs)) {
             return updateTs < 1e12 ? updateTs * 1000 : updateTs;
         }
+
         if (typeof updateTs === "string" && updateTs.trim()) {
-            const trimmed = updateTs.trim();
-            if (/^\d+$/.test(trimmed)) {
-                const asNum = Number(trimmed);
-                if (Number.isFinite(asNum)) return asNum < 1e12 ? asNum * 1000 : asNum;
+            const raw = updateTs.trim();
+
+            // Pure numeric string
+            if (/^\d+$/.test(raw)) {
+                const n = Number(raw);
+                if (Number.isFinite(n)) return n < 1e12 ? n * 1000 : n;
             }
-            // No timezone → treat as IST
-            const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
-            const candidate = hasZone ? trimmed : `${trimmed}+05:30`;
-            const parsed = Date.parse(candidate);
-            if (!Number.isNaN(parsed)) return parsed;
+
+            // DD/MM/YY HH:MM:SS  or  DD/MM/YY,HH:MM:SS
+            // e.g. "02/04/26 13:07:49" or "02/04/26,13:01:47"
+            const ddmmyy = raw.match(/^(\d{2})\/(\d{2})\/(\d{2})[, ](\d{2}:\d{2}:\d{2})$/);
+            if (ddmmyy) {
+                const [, dd, mm, yy, time] = ddmmyy;
+                // Reconstruct as YYYY-MM-DDTHH:MM:SS+05:30
+                const isoStr = `20${yy}-${mm}-${dd}T${time}+05:30`;
+                const ms = Date.parse(isoStr);
+                if (!Number.isNaN(ms)) return ms;
+            }
+
+            // Standard ISO / RFC strings (with or without timezone)
+            const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+            const candidate = hasZone ? raw : `${raw}+05:30`;
+            const ms = Date.parse(candidate);
+            if (!Number.isNaN(ms)) return ms;
         }
     }
 
-    // Fallback: generic _ts / ts / timestamp / createdAt / time fields
+    // Generic fallback fields: _ts / ts / timestamp / createdAt / time
     const raw = payload._ts ?? payload.ts ?? payload.timestamp ?? payload.createdAt ?? payload.time;
     if (typeof raw === "number" && Number.isFinite(raw)) {
         return raw < 1e12 ? raw * 1000 : raw;
@@ -69,13 +94,12 @@ function parsePayloadTimestamp(payload) {
         const trimmed = raw.trim();
         if (!trimmed) return null;
         if (/^\d+$/.test(trimmed)) {
-            const asNum = Number(trimmed);
-            if (Number.isFinite(asNum)) return asNum < 1e12 ? asNum * 1000 : asNum;
+            const n = Number(trimmed);
+            if (Number.isFinite(n)) return n < 1e12 ? n * 1000 : n;
         }
         const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
-        const candidate = hasZone ? trimmed : `${trimmed}+05:30`;
-        const parsed = Date.parse(candidate);
-        return Number.isNaN(parsed) ? null : parsed;
+        const ms = Date.parse(hasZone ? trimmed : `${trimmed}+05:30`);
+        return Number.isNaN(ms) ? null : ms;
     }
     return null;
 }
@@ -133,15 +157,35 @@ function getClient() {
                 : receivedAt;        // live message → definitely fresh
 
             // DEBUG: log every received message so we can see exact payload structure
-            console.log(`[MQTT] ${serialId} | retain=${packet?.retain} | msSinceSub=${msSinceSubscribe} | isRetainedReplay=${isInitialRetainedReplay} | payloadTs=${payloadTs} | keys=${Object.keys(parsed).join(",")}`);
+            console.log(`[MQTT] ${serialId} | msSinceSub=${msSinceSubscribe} | isRetainedReplay=${isInitialRetainedReplay} | payloadTs=${payloadTs ? new Date(payloadTs).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"}) : null} | keys=${Object.keys(parsed).join(",")}`);
+
+            // Per-channel ERR flags: ERR1..ERR6 (1 = sensor fault, 0 = ok)
+            // Also check global ERR field as fallback
+            const errFlags = {};
+            for (let i = 1; i <= 6; i++) {
+                const v = parsed[`ERR${i}`];
+                if (v !== undefined && v !== null) {
+                    errFlags[`ERR${i}`] = v === 1 || v === "1" || v === true;
+                }
+            }
+            // Global ERR (some devices send a single ERR field)
+            const globalErr = parsed.ERR ?? parsed.err ?? parsed.Error ?? null;
+
+            // Raw UpdateTimeStamp string — all casing variants
+            const rawUpdateTs =
+                parsed.UpdateTimeStamp ??
+                parsed.UpdateTimestamp ??
+                parsed.updateTimestamp ??
+                null;
 
             const channelData = {
                 _ts: payloadTs,
                 _rxTs: rxTimestamp,
                 _hasPayloadTs: payloadTs !== null,
                 _isRetained: isInitialRetainedReplay,
-                _err: parsed.ERR ?? parsed.err ?? parsed.Error ?? null,
-                _updateTs: parsed.UpdateTimeStamp ?? parsed.updateTimestamp ?? null,
+                _err: globalErr,          // global sensor fault (legacy)
+                _errFlags: errFlags,      // per-channel { ERR1: bool, ERR2: bool, ... }
+                _updateTs: rawUpdateTs,   // raw timestamp string for display
             };
             MQTT_CHANNEL_NAMES.forEach((ch) => {
                 channelData[ch] = parsed[ch] ?? null;
@@ -220,17 +264,28 @@ export async function GET(req) {
 
         const data = mqttData[serialId] || {};
         return NextResponse.json({
+            // Raw ADC values
             RawCH1: data.RawCH1 ?? null,
             RawCH2: data.RawCH2 ?? null,
             RawCH3: data.RawCH3 ?? null,
             RawCH4: data.RawCH4 ?? null,
             RawCH5: data.RawCH5 ?? null,
             RawCH6: data.RawCH6 ?? null,
-            _ts: data._ts ?? null,             // device UpdateTimeStamp (ms epoch)
-            _rxTs: data._rxTs ?? null,         // server-receive time (0 = unknown for retained)
-            _err: data._err ?? null,           // ERR field: 0=ok, 1=sensor fault
-            _updateTs: data._updateTs ?? null, // raw UpdateTimeStamp string
-            _isRetained: data._isRetained ?? false, // true = retained broker message (device may be offline)
+            // Calibrated (engineered) values — these are what should be displayed
+            CH1: data.CH1 ?? null,
+            CH2: data.CH2 ?? null,
+            CH3: data.CH3 ?? null,
+            CH4: data.CH4 ?? null,
+            CH5: data.CH5 ?? null,
+            CH6: data.CH6 ?? null,
+            // Timestamps & freshness
+            _ts: data._ts ?? null,                // device UpdateTimeStamp (ms epoch)
+            _rxTs: data._rxTs ?? null,            // server-receive time (0 = unknown for retained)
+            _updateTs: data._updateTs ?? null,    // raw UpdateTimeStamp string for display
+            _isRetained: data._isRetained ?? false,
+            // Error flags
+            _err: data._err ?? null,              // global ERR field (legacy)
+            _errFlags: data._errFlags ?? {},      // per-channel { ERR1: bool, ERR2: bool, ... }
         });
     } catch (error) {
         console.error("[MQTT Readings] Error:", error.message);

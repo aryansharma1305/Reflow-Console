@@ -3,7 +3,10 @@
  * Can be imported in .js files
  */
 
-export const MQTT_CHANNEL_NAMES = ["RawCH1", "RawCH2", "RawCH3", "RawCH4", "RawCH5", "RawCH6"];
+export const MQTT_CHANNEL_NAMES = [
+    "RawCH1", "RawCH2", "RawCH3", "RawCH4", "RawCH5", "RawCH6",
+    "CH1", "CH2", "CH3", "CH4", "CH5", "CH6",
+];
 
 export const MQTT_CHANNEL_COUNT = 6;
 
