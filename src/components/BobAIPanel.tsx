@@ -125,6 +125,7 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [isThinking, setIsThinking] = useState(false);
+    const [sessionId, setSessionId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -179,23 +180,45 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                 ? (sessionStorage.getItem("auth_token") || localStorage.getItem("auth_token"))
                 : null;
 
-            const res = await fetch(BOT_API_URL, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    ...(deviceId ? { "dev-id": deviceId } : {}),
-                },
-                body: JSON.stringify({
-                    message: msg,
-                    ...(deviceId ? { device_id: deviceId } : {}),
-                }),
-            });
+            let currentSessionId = sessionId;
+
+            if (!currentSessionId) {
+                const sessionRes = await fetch("https://reflow-backend.fly.dev/api/v1/create/chat/session", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                        device_id: deviceId || "GENERAL",
+                    }),
+                });
+                if (sessionRes.ok) {
+                    const sessionData = await sessionRes.json();
+                    currentSessionId = sessionData?.data?._id || sessionData?.data?.id || sessionData?.data?.sessionId || sessionData?.sessionId || sessionData?._id || sessionData?.session_id;
+                    if (currentSessionId) setSessionId(currentSessionId);
+                }
+            }
 
             let reply: string | null = null;
-            if (res.ok) {
-                const data = await res.json();
-                reply = data?.reply || data?.message || data?.response || data?.text || null;
+            
+            if (currentSessionId) {
+                const responseUrl = `https://reflow-backend.fly.dev/api/v1/generate/chat/${currentSessionId}/response`;
+                const res = await fetch(responseUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                        user_query: msg,
+                    }),
+                });
+    
+                if (res.ok) {
+                    const data = await res.json();
+                    reply = data?.data?.response || data?.response || data?.reply || data?.message || data?.text || data?.data?.ai_response || null;
+                }
             }
 
             setMessages((prev) => [
@@ -220,12 +243,13 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
         } finally {
             setIsThinking(false);
         }
-    }, [input, isThinking, deviceId]);
+    }, [input, isThinking, deviceId, sessionId]);
 
     const handleReset = () => {
         setMessages([]);
         setInput("");
         setIsThinking(false);
+        setSessionId(null);
         setTimeout(() => {
             setMessages([{
                 id: "reset",
