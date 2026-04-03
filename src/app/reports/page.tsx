@@ -179,66 +179,23 @@ export default function ReportsPage() {
 
         setExporting(true);
         try {
-            // The backend expects YYYY-MM-DD format as shown in the API docs
-            const resData = await exportDeviceData(selectedDevice, startDate, endDate, exportInterval);
+            let backendStartDate = startDate;
+            let backendEndDate = endDate;
+
+            if (useTimeFilter) {
+                // The backend accepts "YYYY-MM-DD HH:mm:00" for precise time filtering
+                backendStartDate = `${startDate} ${startTime}:00`;
+                backendEndDate = `${endDate} ${endTime}:00`;
+            }
+
+            // Convert "1 min" -> "1min", "5 mins" -> "5min"
+            const backendInterval = exportInterval.replace(/\s+/g, '').replace(/s$/, '');
+
+            const resData = await exportDeviceData(selectedDevice, backendStartDate, backendEndDate, backendInterval);
             
             // Handle array or nested data structures
             let dataRowArray = Array.isArray(resData) ? resData 
                                  : (resData?.data || resData?.readings || resData?.deviceData || []);
-
-            // Client-side time based filtering
-            if (useTimeFilter && dataRowArray.length > 0) {
-                const filtered = [];
-                const [startHr, startMin] = startTime.split(':').map(Number);
-                const [endHr, endMin] = endTime.split(':').map(Number);
-                const startMinsOfDay = (startHr || 0) * 60 + (startMin || 0);
-                const endMinsOfDay = (endHr || 0) * 60 + (endMin || 0);
-
-                for (const row of dataRowArray) {
-                    const timeField = row.timestamp || row.createdAt || row.created_at || row.time;
-                    if (!timeField) {
-                        filtered.push(row);
-                        continue;
-                    }
-                    const rd = new Date(timeField);
-                    if (isNaN(rd.getTime())) {
-                        filtered.push(row);
-                        continue;
-                    }
-                    const rowMins = rd.getHours() * 60 + rd.getMinutes();
-                    if (rowMins >= startMinsOfDay && rowMins <= endMinsOfDay) {
-                        filtered.push(row);
-                    }
-                }
-                dataRowArray = filtered;
-            }
-
-            // Client-side filtering as fallback
-            let intervalMins = 1;
-            if (exportInterval === "5 mins") intervalMins = 5;
-            if (exportInterval === "15 mins") intervalMins = 15;
-
-            if (intervalMins > 1 && dataRowArray.length > 0) {
-                const sampled = [];
-                let lastTime = 0;
-                for (const row of dataRowArray) {
-                    const timeField = row.timestamp || row.createdAt || row.created_at || row.time;
-                    if (!timeField) {
-                        sampled.push(row);
-                        continue;
-                    }
-                    const time = new Date(timeField).getTime();
-                    if (isNaN(time)) {
-                        sampled.push(row);
-                        continue;
-                    }
-                    if (lastTime === 0 || time - lastTime >= intervalMins * 60 * 1000) {
-                        sampled.push(row);
-                        lastTime = time;
-                    }
-                }
-                dataRowArray = sampled;
-            }
 
             if (!dataRowArray || dataRowArray.length === 0) throw new Error("No data found");
             setExportData(dataRowArray);
