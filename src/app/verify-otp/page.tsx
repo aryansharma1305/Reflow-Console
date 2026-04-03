@@ -29,6 +29,7 @@ function VerifyOTPContent() {
     const searchParams = useSearchParams();
     const email = searchParams.get("email");
     const action = searchParams.get("action") || "signup";
+    const isResetFlow = action === "reset";
 
     const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
     const [loading, setLoading] = useState(false);
@@ -85,13 +86,29 @@ function VerifyOTPContent() {
         try {
             const result = await verifyOTP(email, fullOtp);
             const isSuccess =
-                (result.success && result.data?.token) ||
+                result.success ||
                 (result.message && result.message.toLowerCase().includes("verified")) ||
                 result.data?.token;
 
             if (isSuccess) {
                 const token = result.data?.token || result.token;
                 if (token) saveToken(token);
+
+                if (isResetFlow) {
+                    const sessionToken =
+                        token ||
+                        (typeof window !== "undefined"
+                            ? localStorage.getItem("auth_token") || sessionStorage.getItem("auth_token")
+                            : "");
+
+                    if (!sessionToken) {
+                        setError("Reset password requires an authenticated session token. Please sign in and use Settings > Security.");
+                        return;
+                    }
+
+                    window.location.href = `/reset-password?email=${encodeURIComponent(email)}&verificationCode=${encodeURIComponent(fullOtp)}`;
+                    return;
+                }
 
                 let target = "/?setup=org";
                 try {
@@ -185,7 +202,11 @@ function VerifyOTPContent() {
                             transition={{ delay: 0.6, duration: 0.6 }}
                         />
                         <p className="text-gray-700 mb-2 text-lg">
-                            {action === "login" ? "Enter the login OTP sent to" : "Enter the 6-digit code sent to"}
+                            {action === "login"
+                                ? "Enter the login OTP sent to"
+                                : action === "reset"
+                                    ? "Enter the password reset OTP sent to"
+                                    : "Enter the 6-digit code sent to"}
                         </p>
                         <p className="text-blue-700 font-bold text-base mb-8 truncate">
                             {email ?? "your email"}
