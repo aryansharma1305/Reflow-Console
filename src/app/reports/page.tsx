@@ -71,9 +71,11 @@ export default function ReportsPage() {
     const [selectedDevice, setSelectedDevice] = useState("");
     const [loading, setLoading] = useState(true);
 
-    // Export
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    const [useTimeFilter, setUseTimeFilter] = useState(false);
+    const [startTime, setStartTime] = useState("05:00");
+    const [endTime, setEndTime] = useState("09:00");
     const [exportFormat, setExportFormat] = useState<"csv" | "pdf">("csv");
     const [exportInterval, setExportInterval] = useState<"1 min" | "5 mins" | "15 mins">("1 min");
     const [exporting, setExporting] = useState(false);
@@ -178,10 +180,20 @@ export default function ReportsPage() {
         setExporting(true);
         try {
             // Send full timestamp bounds for precision
-            const startTimestamp = new Date(startDate).toISOString();
-            const endTimestamp = new Date(endDate + "T23:59:59").toISOString();
-            
-            const resData = await exportDeviceData(selectedDevice, startTimestamp, endTimestamp, exportInterval);
+            let startTimestampStr = "";
+            let endTimestampStr = "";
+
+            if (useTimeFilter) {
+                // If using time filter, construct date-time string
+                startTimestampStr = new Date(`${startDate}T${startTime}:00`).toISOString();
+                endTimestampStr = new Date(`${endDate}T${endTime}:59`).toISOString();
+            } else {
+                // Otherwise use start of day and end of day
+                startTimestampStr = new Date(`${startDate}T00:00:00`).toISOString();
+                endTimestampStr = new Date(`${endDate}T23:59:59`).toISOString();
+            }
+
+            const resData = await exportDeviceData(selectedDevice, startTimestampStr, endTimestampStr, exportInterval);
             
             // Handle array or nested data structures
             let dataRowArray = Array.isArray(resData) ? resData 
@@ -475,6 +487,46 @@ export default function ReportsPage() {
                                         className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary"
                                     />
                                 </div>
+                            </div>
+
+                            {/* Time Filter */}
+                            <div className="space-y-3 p-3 bg-surface-muted/30 border border-border-subtle rounded-lg">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={useTimeFilter}
+                                        onChange={(e) => setUseTimeFilter(e.target.checked)}
+                                        className="w-4 h-4 text-primary rounded border-border-subtle focus:ring-primary/20 accent-primary"
+                                    />
+                                    <span className="text-sm font-semibold text-text-primary mb-0.5">Enable Specific Time Period</span>
+                                </label>
+                                
+                                {useTimeFilter && (
+                                    <div className="grid grid-cols-2 gap-3 mt-2">
+                                        <div>
+                                            <label className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5 block">
+                                                Start Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={startTime}
+                                                onChange={(e) => setStartTime(e.target.value)}
+                                                className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary time-input-no-ampm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5 block">
+                                                End Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={endTime}
+                                                onChange={(e) => setEndTime(e.target.value)}
+                                                className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary time-input-no-ampm"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Interval and Format Selection */}
