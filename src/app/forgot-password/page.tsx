@@ -4,11 +4,9 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { generateOTP } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
-    const router = useRouter();
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -34,7 +32,7 @@ export default function ForgotPasswordPage() {
                 (result.message && result.message.toLowerCase().includes("success"));
 
             if (isSuccess) {
-                window.location.href = `/verify-otp?email=${encodeURIComponent(email)}&action=reset`;
+                window.location.href = `/reset-password?email=${encodeURIComponent(email)}`;
             } else {
                 setError(result.message || "Failed to send OTP. Please try again.");
             }

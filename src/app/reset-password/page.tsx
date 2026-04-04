@@ -23,8 +23,9 @@ export default function ResetPasswordPage() {
 function ResetPasswordContent() {
     const searchParams = useSearchParams();
     const email = searchParams.get("email") || "";
-    const verificationCode = searchParams.get("verificationCode") || "";
+    const initialCode = searchParams.get("verificationCode") || "";
 
+    const [verificationCode, setVerificationCode] = useState(initialCode);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -108,7 +109,7 @@ function ResetPasswordContent() {
                         </span>
                     </h1>
                     <p className="text-sm text-gray-700 mb-6">
-                        Enter a new password for {maskedEmail || "your account"}.
+                        Enter OTP, new password and confirm password for {maskedEmail || "your account"}.
                     </p>
 
                     {error && (
@@ -124,6 +125,19 @@ function ResetPasswordContent() {
                     )}
 
                     <form className="space-y-4" onSubmit={handleSubmit}>
+                        <div>
+                            <label className="mb-1.5 block text-sm font-semibold text-gray-700">OTP Code</label>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                value={verificationCode}
+                                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                placeholder="Enter 6-digit OTP"
+                                className="w-full px-4 py-3 rounded-xl bg-white/90 border-2 border-blue-100 focus:border-blue-500 focus:outline-none text-gray-800"
+                                maxLength={6}
+                            />
+                        </div>
+
                         <div>
                             <label className="mb-1.5 block text-sm font-semibold text-gray-700">New Password</label>
                             <input
