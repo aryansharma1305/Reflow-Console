@@ -7,6 +7,7 @@ import {
     getUserEmail,
     getUserName,
     getProfile,
+    generateOTP,
     updateUserPassword,
     isAuthenticated,
 } from "@/lib/api";
@@ -38,6 +39,7 @@ export default function SettingsPage() {
     const [verificationCode, setVerificationCode] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [sendingOtp, setSendingOtp] = useState(false);
     const [updatingPassword, setUpdatingPassword] = useState(false);
 
     // For sidebar/header
@@ -119,6 +121,27 @@ export default function SettingsPage() {
             setToast({ msg: message, ok: false });
         } finally {
             setUpdatingPassword(false);
+            setTimeout(() => setToast(null), 3500);
+        }
+    };
+
+    const handleSendPasswordOtp = async () => {
+        setToast(null);
+        const targetEmail = (email || fallbackEmail || "").trim();
+        if (!targetEmail) {
+            setToast({ msg: "Could not detect your email. Refresh and try again.", ok: false });
+            return;
+        }
+
+        setSendingOtp(true);
+        try {
+            await generateOTP(targetEmail, "reset");
+            setToast({ msg: `OTP sent to ${targetEmail}. Enter it below to update password.`, ok: true });
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Failed to send OTP.";
+            setToast({ msg: message, ok: false });
+        } finally {
+            setSendingOtp(false);
             setTimeout(() => setToast(null), 3500);
         }
     };
@@ -473,7 +496,14 @@ export default function SettingsPage() {
                                                     className="w-full px-3 py-2.5 rounded-lg border border-border-subtle bg-white text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                                                 />
                                             </div>
-                                            <div className="flex justify-end">
+                                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                                <button
+                                                    onClick={handleSendPasswordOtp}
+                                                    disabled={sendingOtp}
+                                                    className="px-4 py-2 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-surface-muted transition-colors disabled:opacity-60"
+                                                >
+                                                    {sendingOtp ? "Sending OTP..." : "Send OTP"}
+                                                </button>
                                                 <button
                                                     onClick={handlePasswordUpdate}
                                                     disabled={updatingPassword}
