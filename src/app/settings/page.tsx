@@ -40,6 +40,7 @@ export default function SettingsPage() {
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [sendingOtp, setSendingOtp] = useState(false);
+    const [otpCountdown, setOtpCountdown] = useState(0);
     const [updatingPassword, setUpdatingPassword] = useState(false);
 
     // For sidebar/header
@@ -134,6 +135,16 @@ export default function SettingsPage() {
         }
 
         setSendingOtp(true);
+        setOtpCountdown(30);
+
+        // Countdown tick every second
+        const countdownTick = setInterval(() => {
+            setOtpCountdown(prev => {
+                if (prev <= 1) { clearInterval(countdownTick); return 0; }
+                return prev - 1;
+            });
+        }, 1000);
+
         try {
             await generateOTP(targetEmail, "login");
             setToast({ msg: `OTP sent to ${targetEmail}. Enter it below to update password.`, ok: true });
@@ -141,8 +152,10 @@ export default function SettingsPage() {
             const message = err instanceof Error ? err.message : "Failed to send OTP.";
             setToast({ msg: message, ok: false });
         } finally {
+            clearInterval(countdownTick);
             setSendingOtp(false);
-            setTimeout(() => setToast(null), 3500);
+            setOtpCountdown(0);
+            setTimeout(() => setToast(null), 5000);
         }
     };
 
@@ -500,9 +513,12 @@ export default function SettingsPage() {
                                                 <button
                                                     onClick={handleSendPasswordOtp}
                                                     disabled={sendingOtp}
-                                                    className="px-4 py-2 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-surface-muted transition-colors disabled:opacity-60"
+                                                    className="px-4 py-2 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-surface-muted transition-colors disabled:opacity-60 min-w-[120px]"
                                                 >
-                                                    {sendingOtp ? "Sending OTP..." : "Send OTP"}
+                                                    {sendingOtp
+                                                        ? `Sending OTP${otpCountdown > 0 ? ` (${otpCountdown}s)` : "\u2026"}`
+                                                        : "Send OTP"
+                                                    }
                                                 </button>
                                                 <button
                                                     onClick={handlePasswordUpdate}

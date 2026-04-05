@@ -238,7 +238,7 @@ export async function updateUserPassword(payload: {
 
 export async function generateOTP(email: string, action: string = "signup") {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s — accommodate Fly.dev cold starts
 
     try {
         const res = await apiFetch("/auth/user/generate/otp", {
@@ -250,7 +250,7 @@ export async function generateOTP(email: string, action: string = "signup") {
         return handleResponse(res);
     } catch (err: unknown) {
         if ((err as { name?: string })?.name === "AbortError") {
-            throw new Error("OTP request timed out. Please try again.");
+            throw new Error("OTP request timed out after 30 seconds. The server may be starting up — please try again.");
         }
         throw err;
     } finally {

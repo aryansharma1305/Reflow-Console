@@ -373,50 +373,114 @@ export default function AnalyticsPage() {
     }
 
     // Export as CSV with dynamic intervals
-    async function exportCSV(intervalMinutes?: number) {
-        if (chartData.length === 0) return;
-        
-        let exportData = chartData;
-        
-        if (intervalMinutes) {
-            const ms = intervalMinutes * 60 * 1000;
-            const buckets: Record<number, any> = {};
-            chartData.forEach(row => {
-                if(!row.ts) return;
-                const bucketTs = Math.floor(row.ts / ms) * ms;
-                if (!buckets[bucketTs]) {
-                    buckets[bucketTs] = { ts: bucketTs, time: new Date(bucketTs).toLocaleString("en-IN"), count: 0 };
-                }
-                const b = buckets[bucketTs];
-                b.count++;
-                Object.keys(row).forEach(k => {
-                    if (k !== 'time' && k !== 'ts' && k !== 'timestamp' && typeof row[k] === 'number') {
-                        b[k] = (b[k] || 0) + (row[k] as number);
-                    }
-                });
-            });
-            exportData = Object.values(buckets).map((b: any) => {
-                const res: any = { time: b.time };
-                Object.keys(b).forEach(k => {
-                    if (k !== 'time' && k !== 'ts' && k !== 'count') res[k] = Number((b[k] / b.count).toFixed(2));
-                });
-                return res;
-            }).sort((a,b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-        }
+    // Always fetches fresh raw data from the backend to ensure correct re-bucketing
+    const [csvExporting, setCsvExporting] = useState(false);
 
-        const displayHeaders = ["time", ...channelKeys.map(k => channelConfig[k] || k)];
-        const rows = exportData.map(row => 
-            ["time", ...channelKeys].map(h => row[h] !== undefined ? row[h] : "").join(",")
-        );
-        const csv = [displayHeaders.join(","), ...rows].join("\n");
-        const blob = new Blob([csv], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        const suffix = intervalMinutes ? `_${intervalMinutes}min` : "";
-        a.download = `${selectedDevice}_analytics${suffix}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+    async function exportCSV(intervalMinutes?: number) {
+        if (!selectedDevice || !startDate || !endDate) return;
+        setCsvExporting(true);
+        try {
+            // Always fetch raw data from backend for correct interval bucketing
+            const startTimestamp = new Date(startDate).toISOString();
+            const endTimestamp = new Date(endDate + "T23:59:59").toISOString();
+
+            const resData = await exportDeviceData(selectedDevice, startTimestamp, endTimestamp);
+            const dataRowArray: Array<Record<string, unknown>> = Array.isArray(resData)
+                ? resData
+                : (resData?.data || resData?.readings || resData?.deviceData || []);
+
+            if (!dataRowArray || dataRowArray.length === 0) return;
+
+            // Build numeric keys from raw data
+            const candidateKeys = dataRowArray.flatMap(row =>
+                Object.keys(row).filter(k => k !== "timestamp" && k !== "createdAt" && !k.startsWith("_"))
+            );
+            const rawKeys: string[] = Array.from(new Set<string>(candidateKeys));
+
+            // Parse rows with timestamps
+            interface RawRow { ts: number; [key: string]: string | number | undefined; }
+            const rawRows: RawRow[] = dataRowArray
+                .map((row): RawRow | null => {
+                    const tsRaw = row.timestamp ?? row.createdAt;
+                    const ts = new Date(String(tsRaw || "")).getTime();
+                    if (!Number.isFinite(ts)) return null;
+                    const r: RawRow = { ts };
+                    rawKeys.forEach(k => {
+                        const v = row[k];
+                        const parsed = typeof v === "number" ? v : Number(String(v));
+                        if (Number.isFinite(parsed)) r[k] = parsed;
+                    });
+                    return r;
+                })
+                .filter((r): r is RawRow => Boolean(r))
+                .sort((a, b) => a.ts - b.ts);
+
+            const numericKeys = rawKeys.filter(k => rawRows.some(r => typeof r[k] === "number"));
+
+            // Apply interval bucketing if requested
+            let exportRows: Array<Record<string, string | number | undefined>>;
+            if (intervalMinutes) {
+                const ms = intervalMinutes * 60 * 1000;
+                const buckets: Record<number, { ts: number; count: number; [key: string]: number; }> = {};
+                rawRows.forEach(row => {
+                    const bucketTs = Math.floor(row.ts / ms) * ms;
+                    if (!buckets[bucketTs]) {
+                        buckets[bucketTs] = { ts: bucketTs, count: 0 };
+                    }
+                    const b = buckets[bucketTs];
+                    b.count++;
+                    numericKeys.forEach(k => {
+                        if (typeof row[k] === "number") {
+                            b[k] = (b[k] || 0) + (row[k] as number);
+                        }
+                    });
+                });
+                exportRows = Object.values(buckets)
+                    .sort((a, b) => a.ts - b.ts)
+                    .map(b => {
+                        const out: Record<string, string | number | undefined> = {
+                            time: new Date(b.ts).toLocaleString("en-IN", {
+                                day: "2-digit", month: "short", year: "numeric",
+                                hour: "2-digit", minute: "2-digit",
+                            }),
+                        };
+                        numericKeys.forEach(k => {
+                            if (b[k] !== undefined) out[k] = Number((b[k] / b.count).toFixed(2));
+                        });
+                        return out;
+                    });
+            } else {
+                // Raw export — use actual timestamp
+                exportRows = rawRows.map(row => {
+                    const out: Record<string, string | number | undefined> = {
+                        time: new Date(row.ts).toLocaleString("en-IN", {
+                            day: "2-digit", month: "short", year: "numeric",
+                            hour: "2-digit", minute: "2-digit", second: "2-digit",
+                        }),
+                    };
+                    numericKeys.forEach(k => { out[k] = row[k]; });
+                    return out;
+                });
+            }
+
+            const displayHeaders = ["time", ...numericKeys.map(k => channelConfig[k] || k)];
+            const rows = exportRows.map(row =>
+                ["time", ...numericKeys].map(h => row[h] !== undefined ? row[h] : "").join(",")
+            );
+            const csv = [displayHeaders.join(","), ...rows].join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const suffix = intervalMinutes ? `_${intervalMinutes}min` : "_raw";
+            a.download = `${selectedDevice}_analytics${suffix}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("[Analytics] CSV export failed", err);
+        } finally {
+            setCsvExporting(false);
+        }
     }
 
     // Stat computations
@@ -600,15 +664,21 @@ export default function AnalyticsPage() {
                         <div className="relative z-50">
                             <button
                                 onClick={() => setCsvDropdownOpen(!csvDropdownOpen)}
-                                disabled={chartData.length === 0}
+                                disabled={!selectedDevice || !startDate || !endDate || csvExporting}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-surface-muted transition-colors disabled:opacity-40"
                             >
-                                <Download className="w-4 h-4" /> Export CSV <ChevronDown className="w-3 h-3" />
+                                {csvExporting
+                                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                                    : <Download className="w-4 h-4" />
+                                }
+                                {csvExporting ? "Exporting…" : "Export CSV"}
+                                {!csvExporting && <ChevronDown className="w-3 h-3" />}
                             </button>
                             <AnimatePresence>
-                                {csvDropdownOpen && (
-                                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="absolute top-full right-0 mt-1.5 bg-white border border-border-subtle rounded-lg shadow-xl overflow-hidden py-1 w-48 text-left">
-                                        <button onClick={() => { exportCSV(); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">Raw Data</button>
+                                {csvDropdownOpen && !csvExporting && (
+                                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="absolute top-full right-0 mt-1.5 bg-white border border-border-subtle rounded-lg shadow-xl overflow-hidden py-1 w-52 text-left">
+                                        <button onClick={() => { exportCSV(); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">Raw Data (all readings)</button>
+                                        <button onClick={() => { exportCSV(1); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">1 Min Averaged</button>
                                         <button onClick={() => { exportCSV(5); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">5 Min Averaged</button>
                                         <button onClick={() => { exportCSV(15); setCsvDropdownOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-text-primary hover:bg-surface-muted transition-colors">15 Min Averaged</button>
                                     </motion.div>
