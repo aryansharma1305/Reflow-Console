@@ -237,12 +237,25 @@ export async function updateUserPassword(payload: {
 }
 
 export async function generateOTP(email: string, action: string = "signup") {
-    const res = await apiFetch("/auth/user/generate/otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, action }),
-    });
-    return handleResponse(res);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+        const res = await apiFetch("/auth/user/generate/otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, action }),
+            signal: controller.signal,
+        });
+        return handleResponse(res);
+    } catch (err: unknown) {
+        if ((err as { name?: string })?.name === "AbortError") {
+            throw new Error("OTP request timed out. Please try again.");
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 export async function verifyOTP(email: string, verificationCode: string) {
