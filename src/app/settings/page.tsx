@@ -135,8 +135,13 @@ export default function SettingsPage() {
 
         setSendingOtp(true);
         try {
-            await generateOTP(targetEmail, "reset");
-            setToast({ msg: `OTP sent to ${targetEmail}. Enter it below to update password.`, ok: true });
+            try {
+                await generateOTP(targetEmail, "reset");
+                setToast({ msg: `OTP sent to ${targetEmail}. Enter it below to update password.`, ok: true });
+            } catch {
+                await generateOTP(targetEmail, "login");
+                setToast({ msg: `OTP sent to ${targetEmail}. Enter it below to update password.`, ok: true });
+            }
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : "Failed to send OTP.";
             setToast({ msg: message, ok: false });
