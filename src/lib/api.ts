@@ -241,9 +241,13 @@ export async function generateOTP(email: string, action: string = "signup") {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s — accommodate Fly.dev cold starts
 
     try {
+        const token = getToken();
         const res = await apiFetch("/auth/user/generate/otp", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+                "Content-Type": "application/json",
+                ...(token ? { "Authorization": `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({ email, action }),
             signal: controller.signal,
         });
