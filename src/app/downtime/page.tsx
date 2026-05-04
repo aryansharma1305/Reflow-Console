@@ -770,44 +770,53 @@ export default function DowntimePage() {
                                 </button>
 
                                 {deviceDropdownOpen && (
-                                    <div className="absolute right-0 z-40 mt-2 max-h-72 w-full overflow-y-auto rounded-xl border border-border-subtle bg-white py-1 shadow-xl">
+                                    <div className="absolute right-0 z-40 mt-2 w-full overflow-hidden rounded-xl border border-border-subtle bg-white shadow-xl">
                                         {deviceOptions.length === 0 ? (
                                             <p className="px-3 py-3 text-center text-sm text-text-muted">No devices found</p>
                                         ) : (
-                                            deviceOptions.map((device) => {
-                                                const isSelected = selectedDeviceMeta?.serial === device.serial;
-                                                return (
-                                                    <button
-                                                        key={device.serial}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setSelectedDevice(device.serial);
-                                                            setDeviceDropdownOpen(false);
-                                                        }}
-                                                        className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors ${
-                                                            isSelected ? "bg-primary/5 text-primary" : "text-text-primary hover:bg-surface-muted"
-                                                        }`}
-                                                    >
-                                                        <span className="flex min-w-0 items-center gap-3">
-                                                            <DeviceStatusDot serial={device.serial} />
-                                                            <span className="min-w-0">
-                                                                <span className="block truncate text-sm font-semibold leading-tight">
-                                                                    {device.label}
-                                                                </span>
-                                                                <span className="block truncate text-[11px] font-mono text-text-muted leading-tight">
-                                                                    {device.serial}
-                                                                </span>
-                                                                {device.projectName && (
-                                                                    <span className="block truncate text-[11px] font-medium text-text-muted leading-tight">
-                                                                        {device.projectName}
+                                            <>
+                                                <div className="max-h-72 overflow-y-scroll py-1 pr-2 [scrollbar-gutter:stable]">
+                                                    {deviceOptions.map((device) => {
+                                                        const isSelected = selectedDeviceMeta?.serial === device.serial;
+                                                        return (
+                                                            <button
+                                                                key={device.serial}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedDevice(device.serial);
+                                                                    setDeviceDropdownOpen(false);
+                                                                }}
+                                                                className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors ${
+                                                                    isSelected ? "bg-primary/5 text-primary" : "text-text-primary hover:bg-surface-muted"
+                                                                }`}
+                                                            >
+                                                                <span className="flex min-w-0 items-center gap-3">
+                                                                    <DeviceStatusDot serial={device.serial} />
+                                                                    <span className="min-w-0">
+                                                                        <span className="block truncate text-sm font-semibold leading-tight">
+                                                                            {device.label}
+                                                                        </span>
+                                                                        <span className="block truncate text-[11px] font-mono text-text-muted leading-tight">
+                                                                            {device.serial}
+                                                                        </span>
+                                                                        {device.projectName && (
+                                                                            <span className="block truncate text-[11px] font-medium text-text-muted leading-tight">
+                                                                                {device.projectName}
+                                                                            </span>
+                                                                        )}
                                                                     </span>
-                                                                )}
-                                                            </span>
-                                                        </span>
-                                                        {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                                                    </button>
-                                                );
-                                            })
+                                                                </span>
+                                                                {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                {deviceOptions.length > 4 && (
+                                                    <div className="pointer-events-none border-t border-border-subtle bg-gradient-to-r from-surface-muted/90 via-white to-surface-muted/90 px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-primary">
+                                                        Scroll to view all {deviceOptions.length} devices
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 )}
