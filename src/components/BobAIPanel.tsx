@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Bot, RotateCcw, Send, Maximize2, Minimize2, Sparkles, Copy, Check } from "lucide-react";
+import { X, Bot, RotateCcw, Send, Sparkles, Copy, Check } from "lucide-react";
+import { useProjects } from "@/lib/ProjectsContext";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_REFLOW_API_URL || "https://reflow-backend.fly.dev/api/v1").replace(/\/+$/, "");
 const DASHBOARD_CHAT_BASE_URL = "https://reflow-backend.fly.dev/api/v1";
-const CHAT_REQUEST_TIMEOUT_MS = 15_000;
+const CHAT_REQUEST_TIMEOUT_MS = 30_000; // 30s — backend AI can be slow
 const CHAT_BASE_CANDIDATES = Array.from(new Set([API_BASE_URL, DASHBOARD_CHAT_BASE_URL].filter(Boolean)));
 
 interface BobAIPanelProps {
@@ -20,6 +21,25 @@ interface ChatMessage {
     role: "user" | "assistant";
     content: string;
     ts: number;
+}
+
+interface DeviceOption {
+    serial: string;
+    name: string;
+    projectName?: string;
+}
+
+function getStoredDeviceId(): string {
+    if (typeof window !== "undefined") {
+        const stored = sessionStorage.getItem("chatbot_device_id");
+        if (stored) return stored;
+    }
+    return "";
+}
+
+function rememberDeviceId(deviceId: string) {
+    if (typeof window === "undefined" || !deviceId) return;
+    sessionStorage.setItem("chatbot_device_id", deviceId);
 }
 
 function getAuthToken(): string {
@@ -42,17 +62,18 @@ function getChatSessionId(payload: any): string | null {
 }
 
 function getChatReply(payload: any): string | null {
+    if (payload?.status === "error") return null;
     return (
         payload?.data?.response ||
         payload?.data?.ai_response ||
         payload?.response ||
         payload?.reply ||
-        payload?.message ||
         payload?.text ||
         null
     );
 }
 
+// ── Fetch with timeout ──────────────────────────────────────────
 async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs = CHAT_REQUEST_TIMEOUT_MS) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -60,12 +81,10 @@ async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs = 
     try {
         const response = await fetch(url, { ...init, signal: controller.signal });
         const contentType = response.headers.get("content-type") || "";
-
         if (contentType.includes("application/json")) {
             const data = await response.json();
             return { response, data, text: "" };
         }
-
         const text = await response.text();
         return { response, data: null, text };
     } finally {
@@ -94,7 +113,7 @@ async function createSessionForBase(baseUrl: string, targetDeviceId: string, tok
         return { sessionId: "", error: "Session id missing in response." };
     }
 
-    // Match dashboard widget behavior: one retry without auth headers.
+    // Match dashboard widget behavior: retry without auth if auth is rejected.
     if (token && first.response.status === 401) {
         const second = await fetchJsonWithTimeout(endpoint, {
             method: "POST",
@@ -112,6 +131,43 @@ async function createSessionForBase(baseUrl: string, targetDeviceId: string, tok
 
     const firstError = first.data?.message || first.data?.error || first.text || `HTTP ${first.response.status}`;
     return { sessionId: "", error: firstError };
+}
+
+async function sendChatMessage(baseUrl: string, sessionId: string, userQuery: string, token: string): Promise<string> {
+    const endpoint = `${baseUrl}/generate/chat/${sessionId}/response`;
+    const first = await fetchJsonWithTimeout(endpoint, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...buildAuthHeader(token),
+        },
+        body: JSON.stringify({ user_query: userQuery }),
+    });
+
+    let finalResponse = first.response;
+    let finalData = first.data;
+    let finalText = first.text;
+
+    if (!first.response.ok && token && first.response.status === 401) {
+        const retry = await fetchJsonWithTimeout(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_query: userQuery }),
+        });
+        finalResponse = retry.response;
+        finalData = retry.data;
+        finalText = retry.text;
+    }
+
+    if (!finalResponse.ok || finalData?.status === "error") {
+        const apiMessage = finalData?.message || finalData?.error || finalText || `HTTP ${finalResponse.status}`;
+        throw new Error(`Chat response failed: ${apiMessage}`);
+    }
+
+    const botMessage = getChatReply(finalData);
+    if (!botMessage) throw new Error("No response content from server.");
+
+    return botMessage;
 }
 
 // ── Markdown-like renderer: bold, inline-code, bullet lists, numbered lists ──
@@ -217,13 +273,60 @@ const SUGGESTIONS = [
 ];
 
 export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProps) {
+    const { devices: cachedDevices, loading: devicesLoading } = useProjects();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [isThinking, setIsThinking] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [sessionBaseUrl, setSessionBaseUrl] = useState<string | null>(null);
+    const [selectedDeviceId, setSelectedDeviceId] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+
+    const deviceOptions = useMemo<DeviceOption[]>(() => {
+        const seen = new Set<string>();
+        return (cachedDevices || [])
+            .map((device: any) => {
+                const serial = String(
+                    device.serialNumber ||
+                    device.serial_no ||
+                    device.serialNo ||
+                    device.serial_number ||
+                    device.deviceId ||
+                    device.id ||
+                    device._id ||
+                    ""
+                ).trim();
+                if (!serial || seen.has(serial)) return null;
+                seen.add(serial);
+                return {
+                    serial,
+                    name: String(device.name || serial),
+                    projectName: device.projectName ? String(device.projectName) : undefined,
+                };
+            })
+            .filter(Boolean) as DeviceOption[];
+    }, [cachedDevices]);
+
+    const activeDeviceId = useMemo(() => {
+        const storedDeviceId = getStoredDeviceId();
+        const storedDeviceStillExists =
+            !storedDeviceId ||
+            deviceOptions.length === 0 ||
+            deviceOptions.some((device) => device.serial === storedDeviceId);
+
+        return (
+            deviceId ||
+            selectedDeviceId ||
+            (storedDeviceStillExists ? storedDeviceId : "") ||
+            deviceOptions[0]?.serial ||
+            ""
+        );
+    }, [deviceId, selectedDeviceId, deviceOptions]);
+
+    const activeDevice = useMemo(() => {
+        return deviceOptions.find((device) => device.serial === activeDeviceId) || null;
+    }, [activeDeviceId, deviceOptions]);
 
     // Greet on open
     useEffect(() => {
@@ -232,9 +335,9 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                 {
                     id: "welcome",
                     role: "assistant",
-                    content: deviceId
-                        ? `Hi! I'm **Bob**, your Reflow AI assistant.\n\nI'm currently watching over device **${deviceId}**. I can help you understand sensor readings, configure thresholds, troubleshoot issues, or export data.\n\nWhat would you like to know?`
-                        : `Hi! I'm **Bob**, your Reflow AI assistant.\n\nI can help you with:\n- Understanding device data and sensor readings\n- Navigating Analytics and Reports\n- Configuring MQTT settings and thresholds\n- Troubleshooting offline devices\n\nWhat would you like to know?`,
+                    content: activeDeviceId
+                        ? `Hi! I'm **Bob**, your Reflow AI assistant.\n\nI'm currently watching over device **${activeDevice?.name || activeDeviceId}** (${activeDeviceId}). I can help you understand sensor readings, configure thresholds, troubleshoot issues, or export data.\n\nWhat would you like to know?`
+                        : `Hi! I'm **Bob**, your Reflow AI assistant.\n\nPlease select a device first. Bob needs a device serial number before starting a chat session.`,
                     ts: Date.now(),
                 },
             ]);
@@ -242,7 +345,41 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
         if (isOpen) {
             setTimeout(() => inputRef.current?.focus(), 300);
         }
-    }, [isOpen]);
+    }, [isOpen, activeDeviceId, activeDevice?.name, messages.length]);
+
+    useEffect(() => {
+        if (!activeDeviceId) return;
+        rememberDeviceId(activeDeviceId);
+    }, [activeDeviceId]);
+
+    useEffect(() => {
+        setSessionId(null);
+        setSessionBaseUrl(null);
+        if (!messages.length) return;
+        setMessages((prev) => {
+            if (prev.length === 1 && (prev[0].id === "welcome" || prev[0].id === "reset")) {
+                return [{
+                    id: "device-change",
+                    role: "assistant",
+                    content: activeDeviceId
+                        ? `Device selected: **${activeDevice?.name || activeDeviceId}** (${activeDeviceId}). Ask me anything about this device.`
+                        : "Please select a device first. Bob needs a device serial number before starting a chat session.",
+                    ts: Date.now(),
+                }];
+            }
+            return [
+                ...prev,
+                {
+                    id: `device-change-${Date.now()}`,
+                    role: "assistant",
+                    content: activeDeviceId
+                        ? `Switched to **${activeDevice?.name || activeDeviceId}** (${activeDeviceId}). I will use this device for the next answers.`
+                        : "Device context cleared. Please select a device before asking Bob.",
+                    ts: Date.now(),
+                },
+            ];
+        });
+    }, [activeDeviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Scroll to bottom on new message
     useEffect(() => {
@@ -259,6 +396,20 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
     const sendMessage = useCallback(async (text?: string) => {
         const msg = (text ?? input).trim();
         if (!msg || isThinking) return;
+        if (!activeDeviceId) {
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `a-${Date.now()}`,
+                    role: "assistant",
+                    content: devicesLoading
+                        ? "I am still loading your devices. Please try again in a moment."
+                        : "Please select a device first. Bob needs a device serial number to create a chat session.",
+                    ts: Date.now(),
+                },
+            ]);
+            return;
+        }
 
         const userMsg: ChatMessage = {
             id: `u-${Date.now()}`,
@@ -276,13 +427,12 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
             let currentSessionId = sessionId;
             let currentSessionBase = sessionBaseUrl;
 
-            if (!currentSessionId) {
-                const targetDeviceId = deviceId || "GENERAL";
+            if (!currentSessionId || !currentSessionBase) {
                 const errors: string[] = [];
 
                 for (const baseUrl of CHAT_BASE_CANDIDATES) {
                     try {
-                        const result = await createSessionForBase(baseUrl, targetDeviceId, token);
+                        const result = await createSessionForBase(baseUrl, activeDeviceId, token);
                         if (result.sessionId) {
                             currentSessionId = result.sessionId;
                             currentSessionBase = baseUrl;
@@ -296,67 +446,29 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                 }
 
                 if (!currentSessionId || !currentSessionBase) {
-                    throw new Error(`Session creation failed. ${errors.join(" | ")}`);
+                    throw new Error(`Session creation failed for ${activeDeviceId}. ${errors.join(" | ")}`);
                 }
 
                 setSessionId(currentSessionId);
                 setSessionBaseUrl(currentSessionBase);
             }
 
-            let reply: string | null = null;
-
-            if (currentSessionId && currentSessionBase) {
-                const responseUrl = `${currentSessionBase}/generate/chat/${currentSessionId}/response`;
-                const { response: res, data, text: responseText } = await fetchJsonWithTimeout(responseUrl, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...buildAuthHeader(token),
-                    },
-                    body: JSON.stringify({
-                        user_query: msg,
-                    }),
-                });
-
-                let finalResponse = res;
-                let finalData = data;
-                let finalText = responseText;
-
-                if (!res.ok && token && res.status === 401) {
-                    const retry = await fetchJsonWithTimeout(responseUrl, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            user_query: msg,
-                        }),
-                    });
-                    finalResponse = retry.response;
-                    finalData = retry.data;
-                    finalText = retry.text;
-                }
-
-                if (!finalResponse.ok) {
-                    const apiMessage = finalData?.message || finalData?.error || finalText || `HTTP ${finalResponse.status}`;
-                    throw new Error(`Chat response failed: ${apiMessage}`);
-                }
-
-                reply = getChatReply(finalData);
-            }
+            const reply = await sendChatMessage(currentSessionBase, currentSessionId, msg, token);
 
             setMessages((prev) => [
                 ...prev,
                 {
                     id: `a-${Date.now()}`,
                     role: "assistant",
-                    content: reply || getFallbackReply(msg),
+                    content: reply,
                     ts: Date.now(),
                 },
             ]);
         } catch (error: any) {
+            console.error("[BobAI] Error:", error);
+
             const message = error?.name === "AbortError"
-                ? "Chat request timed out. Please try again."
+                ? "Chat request timed out. The AI service may be slow — please try again."
                 : (typeof error?.message === "string" ? error.message : "Unable to connect to chat right now.");
 
             setMessages((prev) => [
@@ -371,7 +483,7 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
         } finally {
             setIsThinking(false);
         }
-    }, [input, isThinking, deviceId, sessionId, sessionBaseUrl]);
+    }, [input, isThinking, activeDeviceId, devicesLoading, sessionId, sessionBaseUrl]);
 
     const handleReset = () => {
         setMessages([]);
@@ -383,7 +495,9 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
             setMessages([{
                 id: "reset",
                 role: "assistant",
-                content: "Chat cleared. How can I help you?",
+                content: activeDeviceId
+                    ? `Chat cleared. I am watching **${activeDevice?.name || activeDeviceId}** (${activeDeviceId}). How can I help?`
+                    : "Chat cleared. Please select a device first.",
                 ts: Date.now(),
             }]);
         }, 80);
@@ -412,7 +526,7 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                             <div>
                                 <p className="text-sm font-bold text-text-primary leading-none">Bob AI</p>
                                 <p className="text-[11px] font-medium text-text-muted mt-0.5">
-                                    {deviceId ? `Watching ${deviceId}` : "Reflow Assistant"}
+                                    {activeDeviceId ? `Watching ${activeDeviceId}` : "Select a device"}
                                 </p>
                             </div>
                         </div>
@@ -433,6 +547,34 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                             </button>
                         </div>
                     </div>
+
+                    {!deviceId && (
+                        <div className="px-5 py-3 border-b border-border-subtle bg-white flex-shrink-0">
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                                Device context
+                            </label>
+                            <select
+                                value={activeDeviceId}
+                                onChange={(event) => setSelectedDeviceId(event.target.value)}
+                                disabled={devicesLoading || deviceOptions.length === 0 || isThinking}
+                                className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm font-semibold text-text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {!activeDeviceId && (
+                                    <option value="">
+                                        {devicesLoading ? "Loading devices..." : "Select a device"}
+                                    </option>
+                                )}
+                                {activeDeviceId && !deviceOptions.some((device) => device.serial === activeDeviceId) && (
+                                    <option value={activeDeviceId}>{activeDeviceId}</option>
+                                )}
+                                {deviceOptions.map((device) => (
+                                    <option key={device.serial} value={device.serial}>
+                                        {device.name} ({device.serial}){device.projectName ? ` - ${device.projectName}` : ""}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     {/* ── Messages ──────────────────────────────────────── */}
                     <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6 scrollbar-thin scrollbar-thumb-border-subtle hover:scrollbar-thumb-border-default">
@@ -530,7 +672,7 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                                 )}
                                 <button
                                     onClick={() => sendMessage()}
-                                    disabled={!input.trim() || isThinking}
+                                    disabled={!input.trim() || isThinking || !activeDeviceId}
                                     className="w-8 h-8 rounded-xl bg-primary hover:bg-primary-hover flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
                                 >
                                     <Send className="w-3.5 h-3.5 text-white" />
@@ -545,23 +687,4 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
             )}
         </AnimatePresence>
     );
-}
-
-function getFallbackReply(question: string): string {
-    const q = question.toLowerCase();
-    if (q.includes("device") || q.includes("sensor"))
-        return "Your devices are monitored in real time. Head to **Analytics** to see channel data, trends, and historical readings. The Devices page shows live online/offline status via MQTT.";
-    if (q.includes("alert") || q.includes("alarm") || q.includes("threshold"))
-        return "Thresholds are configured per-channel in **Device Configuration → Channel Calibration**. Set min/max values and they'll be pushed to the hardware on the next heartbeat sync.";
-    if (q.includes("export") || q.includes("report") || q.includes("csv") || q.includes("pdf"))
-        return "Go to **Reports** to export device data. Pick your device, date range, and format (CSV or PDF), then click Export. You can also schedule automated email reports on that page.";
-    if (q.includes("status") || q.includes("online") || q.includes("offline"))
-        return "Device online/offline status is determined live from **MQTT**. If a device sends data it shows as Online (green). If no data is received within 10 seconds, it shows as Offline.";
-    if (q.includes("mqtt"))
-        return "Reflow uses **MQTT over TCP** for real-time device communication. Devices publish sensor readings to topics like `ABC/12/OUTPUT`. The console subscribes and displays them instantly.";
-    if (q.includes("project"))
-        return "Projects group your IoT devices in one workspace. Create a project from the **Projects** page, then add devices to it using their serial number and subscription key.";
-    if (q.includes("analytics") || q.includes("chart"))
-        return "The **Analytics** page supports Line, Area, and Bar charts. Use **Go Live** to stream MQTT data directly into the chart. You can toggle individual channels on/off and export as PNG or PDF.";
-    return "I'm Bob, your Reflow AI assistant! I can help with device monitoring, MQTT configuration, data export, and navigating the console. What would you like to know?";
 }

@@ -199,6 +199,11 @@ export default function DeviceConfigPage() {
     const deviceId = params.id as string;
     const { removeDeviceFromCache, refresh } = useProjects();
 
+    useEffect(() => {
+        if (!deviceId || typeof window === "undefined") return;
+        sessionStorage.setItem("chatbot_device_id", deviceId);
+    }, [deviceId]);
+
     // Device info
     const [device, setDevice] = useState<DeviceInfo | null>(null);
     const [loadingDevice, setLoadingDevice] = useState(true);
