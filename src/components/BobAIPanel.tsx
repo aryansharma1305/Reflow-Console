@@ -170,6 +170,18 @@ async function sendChatMessage(baseUrl: string, sessionId: string, userQuery: st
     return botMessage;
 }
 
+function buildContextualUserQuery(query: string, deviceId: string, device: DeviceOption | null): string {
+    const deviceName = device?.name || deviceId;
+    const projectName = device?.projectName || "Unknown project";
+
+    return [
+        "You are Bob AI inside the ReFlow Console.",
+        `Selected device: ${deviceName} (${deviceId}) in project ${projectName}.`,
+        "Do not ask which device the user means. Answer for this ReFlow IoT device.",
+        `User question: ${query}`,
+    ].join("\n");
+}
+
 // ── Markdown-like renderer: bold, inline-code, bullet lists, numbered lists ──
 function RenderContent({ text }: { text: string }) {
     const lines = text.split("\n");
@@ -198,10 +210,10 @@ function RenderContent({ text }: { text: string }) {
                 }
                 // Heading (##)
                 if (line.startsWith("## ")) {
-                    return <p key={li} className="font-bold text-white mt-2">{line.slice(3)}</p>;
+                    return <p key={li} className="font-bold text-text-primary mt-2">{line.slice(3)}</p>;
                 }
                 if (line.startsWith("# ")) {
-                    return <p key={li} className="font-bold text-white text-base mt-2">{line.slice(2)}</p>;
+                    return <p key={li} className="font-bold text-text-primary text-base mt-2">{line.slice(2)}</p>;
                 }
                 // Empty line → spacing
                 if (!line.trim()) return <div key={li} className="h-1" />;
@@ -217,11 +229,11 @@ function renderInline(text: string): React.ReactNode {
     const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
     return parts.map((part, i) => {
         if (part.startsWith("**") && part.endsWith("**")) {
-            return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+            return <strong key={i} className="font-semibold text-text-primary">{part.slice(2, -2)}</strong>;
         }
         if (part.startsWith("`") && part.endsWith("`")) {
             return (
-                <code key={i} className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px] text-blue-200">
+                <code key={i} className="px-1.5 py-0.5 rounded bg-surface-muted border border-border-subtle font-mono text-[11px] text-primary">
                     {part.slice(1, -1)}
                 </code>
             );
@@ -453,7 +465,8 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                 setSessionBaseUrl(currentSessionBase);
             }
 
-            const reply = await sendChatMessage(currentSessionBase, currentSessionId, msg, token);
+            const contextualQuery = buildContextualUserQuery(msg, activeDeviceId, activeDevice);
+            const reply = await sendChatMessage(currentSessionBase, currentSessionId, contextualQuery, token);
 
             setMessages((prev) => [
                 ...prev,
@@ -483,7 +496,7 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
         } finally {
             setIsThinking(false);
         }
-    }, [input, isThinking, activeDeviceId, devicesLoading, sessionId, sessionBaseUrl]);
+    }, [input, isThinking, activeDeviceId, activeDevice, devicesLoading, sessionId, sessionBaseUrl]);
 
     const handleReset = () => {
         setMessages([]);
