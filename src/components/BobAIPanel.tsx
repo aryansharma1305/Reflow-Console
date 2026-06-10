@@ -182,6 +182,37 @@ function buildContextualUserQuery(query: string, deviceId: string, device: Devic
     ].join("\n");
 }
 
+function isRecoverableChatFailure(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error || "");
+    return (
+        message.includes("Failed to get response from LLM") ||
+        message.includes("No response content from server") ||
+        message.includes("Chat response failed")
+    );
+}
+
+function buildLocalFallbackReply(query: string, deviceId: string, device: DeviceOption | null, reason?: string): string {
+    const q = query.toLowerCase();
+    const deviceName = device?.name || deviceId;
+    const projectName = device?.projectName || "the selected project";
+    const contextLine = `I have the selected device context: **${deviceName}** (${deviceId}) in **${projectName}**.`;
+    const retryLine = reason ? `\n\nThe backend AI could not generate a live response right now (${reason}).` : "";
+
+    if (q.includes("channel") || q.includes("reading") || q.includes("raw") || q.includes("calibrated")) {
+        return `${contextLine}${retryLine}\n\nFor channel data in ReFlow:\n- Open **Analytics** to view historical channel trends for this device.\n- Open **Reports** to export raw/calibrated channel readings by date range.\n- Open **Devices → ${deviceName} → Set/Edit Parameters** to see channel names, raw values, calibrated values, calibration factor, and alert thresholds.\n- MQTT payloads usually expose raw fields like \`RawCH1\`, \`RawCH2\` and calibrated fields like \`CH1\`, \`CH2\`.\n\nI cannot safely invent the exact live values here unless the backend provides them in the chat response.`;
+    }
+
+    if (q.includes("status") || q.includes("online") || q.includes("offline") || q.includes("mqtt")) {
+        return `${contextLine}${retryLine}\n\nFor this device, check **Devices** for MQTT status and **Device Configuration** for the latest MQTT sync time. Online/offline is based on recent MQTT messages, with a grace window to avoid false offline states during latency.`;
+    }
+
+    if (q.includes("report") || q.includes("export") || q.includes("csv") || q.includes("pdf")) {
+        return `${contextLine}${retryLine}\n\nUse **Reports** for exported device data and **Analytics → Export CSV** for trend data. Select this device, date range, and aggregation window before exporting.`;
+    }
+
+    return `${contextLine}${retryLine}\n\nI can help with this device's channel readings, MQTT status, calibration, alert thresholds, analytics, and reports. Ask a more specific question like “show me channel readings”, “explain MQTT status”, or “how do I export this device data”.`;
+}
+
 // ── Markdown-like renderer: bold, inline-code, bullet lists, numbered lists ──
 function RenderContent({ text }: { text: string }) {
     const lines = text.split("\n");
@@ -466,14 +497,31 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
             }
 
             const contextualQuery = buildContextualUserQuery(msg, activeDeviceId, activeDevice);
-            const reply = await sendChatMessage(currentSessionBase, currentSessionId, contextualQuery, token);
+            let replyText = "";
+
+            try {
+                replyText = await sendChatMessage(currentSessionBase, currentSessionId, contextualQuery, token);
+            } catch (chatError: any) {
+                if (!isRecoverableChatFailure(chatError)) throw chatError;
+                console.warn("[BobAI] Contextual chat failed, retrying plain query", chatError);
+
+                try {
+                    replyText = await sendChatMessage(currentSessionBase, currentSessionId, msg, token);
+                } catch (plainError: any) {
+                    console.warn("[BobAI] Plain chat retry failed, using local fallback", plainError);
+                    const reason = typeof plainError?.message === "string"
+                        ? plainError.message.replace(/^Chat response failed:\s*/i, "")
+                        : "backend LLM failed";
+                    replyText = buildLocalFallbackReply(msg, activeDeviceId, activeDevice, reason);
+                }
+            }
 
             setMessages((prev) => [
                 ...prev,
                 {
                     id: `a-${Date.now()}`,
                     role: "assistant",
-                    content: reply,
+                    content: replyText,
                     ts: Date.now(),
                 },
             ]);
@@ -484,12 +532,17 @@ export default function BobAIPanel({ isOpen, onClose, deviceId }: BobAIPanelProp
                 ? "Chat request timed out. The AI service may be slow — please try again."
                 : (typeof error?.message === "string" ? error.message : "Unable to connect to chat right now.");
 
+            const isRecoverable = isRecoverableChatFailure(error);
+            const fallback = isRecoverable
+                ? buildLocalFallbackReply(msg, activeDeviceId, activeDevice, message.replace(/^Chat response failed:\s*/i, ""))
+                : `Bob AI is unavailable right now.\n\n${message}`;
+
             setMessages((prev) => [
                 ...prev,
                 {
                     id: `a-${Date.now()}`,
                     role: "assistant",
-                    content: `Bob AI is unavailable right now.\n\n${message}`,
+                    content: fallback,
                     ts: Date.now(),
                 },
             ]);
